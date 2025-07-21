@@ -1,0 +1,2025 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rétro-Planning Musical - IndieMusician</title>
+<link rel="icon" type="image/png" href="https://static.wixstatic.com/media/2a5453_c67ebe3814014de589855dc4d7daf906~mv2.png">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; font-family: 'Poppins', sans-serif; }
+        .lucide { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 2; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        // Icônes Lucide complètes en SVG
+        const Calendar = ({ className, style }) => React.createElement('svg', { 
+            className: className + ' lucide', 
+            style: style,
+            viewBox: "0 0 24 24" 
+        }, 
+            React.createElement('rect', { x: "3", y: "4", width: "18", height: "18", rx: "2", ry: "2" }),
+            React.createElement('line', { x1: "16", y1: "2", x2: "16", y2: "6" }),
+            React.createElement('line', { x1: "8", y1: "2", x2: "8", y2: "6" }),
+            React.createElement('line', { x1: "3", y1: "10", x2: "21", y2: "10" })
+        );
+
+        const Plus = ({ className }) => React.createElement('svg', { 
+            className: className + ' lucide', 
+            viewBox: "0 0 24 24" 
+        }, 
+            React.createElement('line', { x1: "12", y1: "5", x2: "12", y2: "19" }),
+            React.createElement('line', { x1: "5", y1: "12", x2: "19", y2: "12" })
+        );
+
+        const Edit = ({ className }) => React.createElement('svg', { 
+            className: className + ' lucide', 
+            viewBox: "0 0 24 24" 
+        }, 
+            React.createElement('path', { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }),
+            React.createElement('path', { d: "M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" })
+        );
+
+        const Trash2 = ({ className }) => React.createElement('svg', { 
+            className: className + ' lucide', 
+            viewBox: "0 0 24 24" 
+        }, 
+            React.createElement('polyline', { points: "3,6 5,6 21,6" }),
+            React.createElement('path', { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" })
+        );
+
+        const X = ({ className }) => React.createElement('svg', { 
+            className: className + ' lucide', 
+            viewBox: "0 0 24 24" 
+        }, 
+            React.createElement('line', { x1: "18", y1: "6", x2: "6", y2: "18" }),
+            React.createElement('line', { x1: "6", y1: "6", x2: "18", y2: "18" })
+        );
+
+        const Copy = ({ className }) => React.createElement('svg', { 
+            className: className + ' lucide', 
+            viewBox: "0 0 24 24" 
+        }, 
+            React.createElement('rect', { x: "9", y: "9", width: "13", height: "13", rx: "2", ry: "2" }),
+            React.createElement('path', { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" })
+        );
+
+        const { useState, useRef, useEffect } = React;
+
+        const MusicPromoPlanner = () => {
+          // États React complets
+          const [projectName, setProjectName] = useState('');
+          const [releaseDate, setReleaseDate] = useState('');
+          const [projectCode, setProjectCode] = useState('');
+          const [weeks, setWeeks] = useState([]);
+          const [showTaskModal, setShowTaskModal] = useState(false);
+          const [editingTask, setEditingTask] = useState(null);
+          const [editingWeekId, setEditingWeekId] = useState(null);
+          const [editingTaskType, setEditingTaskType] = useState('todo');
+          const [taskTitle, setTaskTitle] = useState('');
+          const [taskDescription, setTaskDescription] = useState('');
+          const [taskYouTube, setTaskYouTube] = useState('');
+          const [taskYouTubeTitle, setTaskYouTubeTitle] = useState('');
+          const [taskInstagram, setTaskInstagram] = useState('');
+          const [taskInstagramTitle, setTaskInstagramTitle] = useState('');
+          const [taskExternalUrl, setTaskExternalUrl] = useState('');
+          const [taskExternalButtonText, setTaskExternalButtonText] = useState('');
+          const [taskFiles, setTaskFiles] = useState([]);
+          const [showTaskDetail, setShowTaskDetail] = useState(null);
+          const [showImportModal, setShowImportModal] = useState(false);
+          const [showProjectEdit, setShowProjectEdit] = useState(false);
+          const [weekTemplates, setWeekTemplates] = useState([]);
+          const [showWeekTemplateModal, setShowWeekTemplateModal] = useState(false);
+          const [draggedWeek, setDraggedWeek] = useState(null);
+const [customWeekTitle, setCustomWeekTitle] = useState('');
+const [showVideoModal, setShowVideoModal] = useState(false);
+
+          // Templates de semaines prédéfinies
+          const getWeekTemplates = () => [
+  {
+    id: 'template-empty',
+    name: 'Semaine Vierge',
+    description: 'Semaine vide avec titre personnalisé',
+    todoTasks: [],
+    fanTasks: [],
+    isCustomTitle: true
+  },
+  {
+    id: 'template-promo-standard',
+              name: 'Semaine Promo Standard',
+              description: 'Semaine type de promotion avec tâches équilibrées',
+              todoTasks: [
+                'Créer du contenu pour les réseaux sociaux',
+                'Contacter les médias spécialisés',
+                'Analyser les statistiques de la semaine précédente',
+                'Planifier les posts Instagram de la semaine suivante'
+              ],
+              fanTasks: [
+                '❤️ CONNEXION : (Story) - Partage ton quotidien d\'artiste',
+                '✨ DÉCOUVERTE : (Reels) - Teaser de ton prochain contenu',
+                '📢 PROMO : (Feed) - Post promotionnel avec call-to-action'
+              ]
+            },
+            {
+              id: 'template-creation',
+              name: 'Semaine Création',
+              description: 'Focus sur la création et le studio',
+              todoTasks: [
+                'Sessions d\'enregistrement en studio',
+                'Travailler sur les arrangements',
+                'Faire le mixage des nouvelles prises',
+                'Créer des visuels pour le prochain single'
+              ],
+              fanTasks: [
+                '❤️ CONNEXION : (Story) - Behind the scenes du studio',
+                '✨ DÉCOUVERTE : (Reels) - Aperçu du processus créatif',
+                '❤️ CONNEXION : (Feed) - Photo de toi en train de composer'
+              ]
+            },
+            {
+              id: 'template-marketing',
+              name: 'Semaine Marketing Intensif',
+              description: 'Semaine dédiée au marketing et à la promotion',
+              todoTasks: [
+                'Lancer une campagne publicitaire ciblée',
+                'Contacter les influenceurs pour collaborations',
+                'Optimiser le référencement de tes contenus',
+                'Analyser la concurrence et ajuster la stratégie'
+              ],
+              fanTasks: [
+                '📢 PROMO : (Story et Feed) - Campagne de sensibilisation',
+                '✨ DÉCOUVERTE : (Reels) - Contenu viral potentiel',
+                '❤️ CONNEXION : (Story) - Q&A avec tes fans'
+              ]
+            }
+          ];
+          
+          // Références
+          const fileImportRef = useRef(null);
+          const fileInputRef = useRef(null);
+
+          // Fonction pour générer un code projet unique
+          const generateProjectCode = () => {
+            const prefix = 'MUSIC';
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+              code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            const year = new Date().getFullYear();
+            return prefix + '-' + code + '-' + year;
+          };
+// Fonction pour générer les tâches des semaines personnalisées
+          const generateCustomWeekTasks = (templateId, type) => {
+            const templates = getWeekTemplates();
+            const template = templates.find(t => t.id === templateId);
+            if (!template) return [];
+            
+            const tasks = type === 'todo' ? template.todoTasks : template.fanTasks;
+            return tasks.map((task, index) => ({
+              id: `${templateId}-${type}-${index}-${Date.now()}`,
+              title: task,
+              completed: false,
+              description: '',
+              youtubeUrl: '',
+              youtubeTitle: '',
+              instagramUrl: '',
+              instagramTitle: '',
+              externalUrl: '',
+              externalButtonText: '',
+              files: []
+            }));
+          };
+
+          // Fonction pour générer les semaines de planning
+          const generateWeeks = (releaseDateStr, customWeeks = []) => {
+            if (!releaseDateStr) return [];
+            const releaseDate = new Date(releaseDateStr);
+            const weeksData = [];
+            
+            // Générer les 7 semaines de base (3 avant, semaine de sortie, 3 après)
+            const baseWeeks = [];
+            for (let i = -3; i <= 3; i++) {
+              baseWeeks.push({
+                weekOffset: i,
+                isBase: true
+              });
+            }
+            
+            // Combiner les semaines de base avec les semaines personnalisées
+            const allWeekOffsets = [...baseWeeks, ...customWeeks];
+            
+            // Trier par offset
+            allWeekOffsets.sort((a, b) => a.weekOffset - b.weekOffset);
+            
+            allWeekOffsets.forEach((weekInfo) => {
+              const i = weekInfo.weekOffset;
+              const weekStart = new Date(releaseDate);
+              weekStart.setDate(weekStart.getDate() + (i * 7));
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekEnd.getDate() + 6);
+              
+              let weekNum;
+              if (i < 0) {
+                weekNum = '-' + Math.abs(i);
+              } else if (i === 0) {
+                weekNum = 'SORTIE';
+              } else {
+                weekNum = '+' + i;
+              }
+              
+              const weekData = {
+                id: weekInfo.templateId ? `custom-${weekInfo.templateId}-${i}` : `week-${i}`,
+                number: weekNum,
+                startDate: weekStart.toLocaleDateString('fr-FR'),
+                endDate: weekEnd.toLocaleDateString('fr-FR'),
+                isReleaseWeek: i === 0,
+                isCustomWeek: !weekInfo.isBase,
+                weekOffset: i,
+                templateId: weekInfo.templateId || null,
+                templateName: weekInfo.templateName || null,
+                todoTasks: weekInfo.templateId ? 
+                  generateCustomWeekTasks(weekInfo.templateId, 'todo') : 
+                  generateDefaultTasks(i, 'todo'),
+                fanTasks: weekInfo.templateId ? 
+                  generateCustomWeekTasks(weekInfo.templateId, 'fan') : 
+                  generateDefaultTasks(i, 'fan'),
+                youtubeReplayUrl: ''
+              };
+              
+              weeksData.push(weekData);
+            });
+            
+            // Ajouter le jour J après la semaine de sortie
+            const releaseDayIndex = weeksData.findIndex(w => w.weekOffset === 0);
+            if (releaseDayIndex !== -1) {
+              weeksData.splice(releaseDayIndex + 1, 0, {
+                id: 'release-day',
+                number: 'JOUR J',
+                startDate: releaseDate.toLocaleDateString('fr-FR'),
+                endDate: releaseDate.toLocaleDateString('fr-FR'),
+                isReleaseDay: true,
+                weekOffset: 0.5,
+                todoTasks: generateReleaseDayTasks('todo'),
+                fanTasks: generateReleaseDayTasks('fan')
+              });
+            }
+            
+            // Ajouter le bilan à la fin
+            const maxOffset = Math.max(...allWeekOffsets.map(w => w.weekOffset));
+            const bilanStart = new Date(releaseDate);
+            bilanStart.setDate(bilanStart.getDate() + ((maxOffset + 1) * 7));
+            weeksData.push({
+              id: 'bilan-promo',
+              number: 'BILAN',
+              startDate: bilanStart.toLocaleDateString('fr-FR'),
+              endDate: '',
+              isBilanPromo: true,
+              weekOffset: maxOffset + 1,
+              todoTasks: generateBilanTasks(),
+              fanTasks: []
+            });
+            
+            return weeksData;
+          };
+
+          // Fonction pour générer les tâches par défaut selon la semaine
+          const generateDefaultTasks = (weekOffset, type) => {
+            const defaultTasks = {
+              todo: {
+                '-3': [
+  {
+    title: 'Demander ton code ISRC',
+    description: 'Le code ISRC, c\'est l\'empreinte digitale de ta chanson : il permet de l\'identifier et de te reverser les droits liés à son utilisation (radio, streaming, TV…). \n\nTu peux le prendre via ton distributeur, mais mieux vaut le créer toi-même via la SCPP : tu gardes ainsi la main sur tes droits et ta rémunération.',
+    youtubeUrl: 'https://youtu.be/7gJhyMaQ7-0',
+    youtubeTitle: 'TUTO - Créer ton code ISRC avec la SCPP'
+  },
+  {
+    title: 'Protéger ton titre à la Sacem ou sur MusicStart',
+    description: 'C\'EST QUOI ?\n\nProtéger sa musique, c\'est s\'assurer que tes créations sont reconnues légalement comme étant les tiennes. Cela te donne le contrôle sur la façon dont elles sont utilisées et partagées, te protégeant contre l\'utilisation non autorisée ou le plagiat.\n_________\n\nPOURQUOI IL FAUT LE FAIRE ?\n\nCette protection est essentielle pour maintenir ton intégrité artistique et pour garantir que tu es justement rémunéré pour ton travail. Elle te permet aussi de négocier des droits avec des tiers, comme des maisons de disques ou des distributeurs.\n__________\n\nQU\'EST-CE QUE ÇA VA T\'APPORTER ?\n\nLa tranquillité d\'esprit que ton travail est sécurisé, une reconnaissance professionnelle accrue et des opportunités financières liées à l\'utilisation de tes œuvres.\n\n_________\n\nCOMMENT LE FAIRE ?\n\nEn rejoignant une société de gestion collective comme la Sacem, tu bénéficies de leur expertise en matière de droits d\'auteur. Ils s\'occupent de l\'enregistrement de tes œuvres, suivent leur utilisation, et collectent et redistribuent les revenus générés.',
+    externalUrl: 'https://www.musicstart.com/fr',
+    externalButtonText: 'Lien vers Music Start'
+  },
+  {
+    title: 'Mettre en distribution ton single',
+    description: 'En tant qu\'artiste indépendant, le choix du bon distributeur musical est crucial pour assurer la diffusion efficace de ma musique tout en maximisant mes revenus. \n\nAprès avoir comparé plusieurs plateformes, mon choix s\'est porté sur Dibsteur pour les raisons suivantes :\n\n1. Tarification compétitive :\nDibsteur propose des offres adaptées aux besoins des artistes :\n\t•\tOffre Découverte : Gratuite, elle permet de conserver 50 % des royalties, avec la possibilité de sortir jusqu\'à 5 morceaux par an. \n\t•\tOffre Premium : Pour 16€ par an, elle offre une distribution illimitée tout en conservant 100 % des royalties.\n\nCette structure tarifaire flexible permet aux artistes de choisir l\'option la plus adaptée à leur carrière et à leur budget.',
+    youtubeUrl: 'https://youtu.be/a-DbY5cgU7Q',
+    youtubeTitle: 'TUTO - Distribuer ta musique avec Dibsteur',
+    externalUrl: 'https://dibsteur.fr/',
+    externalButtonText: 'Lien vers Dibsteur'
+  },
+  {
+    title: 'Créer ton compte Spotify For Artist',
+    description: '🎧 C\'EST QUOI ?\nSpotify for Artists, c\'est un compte spécial créé pour toi, artiste, qui te permet de mieux comprendre qui écoute ta musique sur Spotify. C\'est comme un tableau de bord perso pour ta musique !\n\n--------\n\n🤔 POURQUOI ?\nParce qu\'avec ce compte, tu peux :\n- Voir exactement combien de gens écoutent tes morceaux.\n\n- Découvrir dans quels pays ou villes tu es populaire.\n\n- Personnaliser ton profil d\'artiste avec ta photo, ta bio, et tes playlists.\n\n- Accéder à des outils pour mieux communiquer avec tes fans.\n\n- Pitcher ton titre auprès des curateurs playlist éditoriales Spotify \n\n----------\n\n🕑 QUAND PEUX-TU LE CRÉER ?\nDès que tu as publié au moins une chanson ou un EP sur Spotify via un distributeur (comme TuneCore, DistroKid, CD Baby, etc.), tu peux directement créer ton compte Spotify for Artists. C\'est rapide, gratuit, et super utile !',
+    youtubeUrl: 'https://www.indiemusician.fr/creer-ton-compte-spotify-for-artist',
+    youtubeTitle: 'TUTO - Créer ton compte Spotify For Artist',
+    externalUrl: 'https://artists.spotify.com/',
+    externalButtonText: 'Lien vers Spotify For Artist'
+  },
+  {
+    title: 'Pitcher ton titre auprès des curateurs de playlist Spotify',
+    description: '🎧 C\'EST QUOI ?\n\nLe pitch est un court texte (500 caractères max.) qui te permet de présenter ton titre aux curateurs de playlists Spotify, idéalement 3 à 4 semaines avant sa sortie officielle.\n\n⸻\n\n🖊️ COMMENT LE FAIRE ?\n\nSuis ces 3 étapes simples :\n1. Style musical : décris brièvement ton genre musical.\n2. Mood & émotions : exprime l\'ambiance ou l\'émotion principale.\n3. Contexte idéal : suggère un moment parfait pour écouter ton titre.'
+  },
+  {
+    title: 'Prévoir un évènement de fin de promo',
+    description: 'C\'EST QUOI ?\n\nC\'est la grande finale ! Après tout le dur travail, les teasers, la sortie du titre, c\'est le moment de célébrer et de rassembler ton public pour un dernier grand événement. Que ce soit un concert en direct, une écoute exclusive ou une autre expérience immersive, c\'est ta chance de faire les choses en grand !\n\n---------\n\nPOURQUOI IL FAUT LE FAIRE ?\n\nPense à ça comme à la dernière scène d\'un film. Tu veux laisser une impression durable, remercier ton public de leur soutien et clôturer cette campagne promo en beauté. C\'est aussi l\'opportunité de renforcer ton lien avec tes fans et d\'en acquérir de nouveaux !'
+  },
+  {
+    title: 'LANCER TA CAMPAGNE DE TRAFIC VERS TON COMPTE INSTA',
+    description: 'Il s\'agit ici d\'identifier les Reels (contenus découverte) qui ont le mieux fonctionné de manière organique — c\'est-à-dire sans publicité — et de booster leur portée grâce à une campagne sponsorisée. L\'idée : les diffuser auprès d\'une audience ciblée, susceptible d\'apprécier ta musique.\n\nCes publicités vont relayer ton contenu et inciter les gens à visiter ton profil Instagram. Mais attention : une visite ne garantit pas un nouveau follower. C\'est la qualité de ton profil qui fera la différence.',
+    youtubeUrl: 'https://www.youtube.com/watch?v=6PzGOIl2rwE&list=PLJyQbZa40vH7X5LBgqqpIhIYX648OBxoP&pp=gAQB0gcJCV8EOCosWNin',
+    youtubeTitle: 'TUTO - Lancer ta campagne de trafic vers ton compte Insta'
+  },
+  {
+    title: 'LANCER TA CAMPAGNE VERS TA PLAYLIST SPOTIFY',
+    description: '🎯 Le but : générer un max d\'écoutes dès la sortie de ton morceau pour séduire l\'algorithme Spotify.\n\n🚨 Le problème quand t\'es artiste indé : t\'es dépendant des curateurs de playlists (aucune garantie d\'être pris, pas de contrôle).\n\n✅ La solution : tu crées ta propre playlist, bien ciblée, avec des sons populaires du même style que le tien. Tu l\'alimentes régulièrement, tu la promouvois avec un petit budget pub (Insta/Facebook) pour avoir des abonnés qualifiés.',
+    youtubeUrl: 'https://youtu.be/-4KLqkgXAUM',
+    youtubeTitle: 'Vidéo pour comprendre la stratégie'
+  }
+], 
+                '-2': [
+  {
+    title: 'Créer ton dossier de presse digital',
+    description: 'Un EPK, c\'est comme une carte de visite ultra stylée pour les artistes.\nEPK = Electronic Press Kit. C\'est un mini site (ou un PDF) qui regroupe tout ce qu\'un pro a besoin de savoir sur toi : ta bio, ta musique, tes clips, tes photos, tes dates, tes réseaux et tes infos de contact.\n\nC\'est un indispensable pour ta promo : quand tu contactes un label, un média ou un programmateur, tu peux pas juste envoyer un lien Spotify. Avec un EPK bien foutu, tu montres direct que tu es prêt, pro, et que ton projet mérite d\'être écouté.',
+    externalUrl: 'https://www.canva.com/design/DAGTArzenL8/DBXNUeK_BzW_X5gP4Tbp0g/edit?utm_content=DAGTArzenL8&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Lien vers le template EPK PRO Canva à dupliquer'
+  },
+  {
+    title: 'Écrire ton argu presse',
+    description: ''
+  },
+  {
+    title: 'Faire des photos de presse',
+    description: 'Les photos de presse, c\'est relou… mais c\'est crucial.\n-----\nSi tu as le budget pour un shooting avec un·e photographe pro, fonce.\nMais ne claque pas tout ton budget là-dedans : c\'est un plus, pas une priorité absolue. Si t\'es fauché·e, un·e pote et un smartphone suffisent largement à faire le taf.\n\nQuelques règles de base pour réussir tes photos de presse :\n\t•\tBonne qualité (pas flou, pas pixelisé, lumière correcte)\n\t•\tFond simple, pas trop chargé : il faut qu\'on puisse y ajouter du texte (au-dessus, à côté…)\n\t•\tDe l\'espace autour de toi, pour pouvoir recadrer en format portrait ou paysage\n\t•\tUtilise le mode portrait de ton smartphone : effet pro assuré\n\t•\tEt surtout : habille-toi selon ta direction artistique, ton univers visuel doit déjà être clair et travaillé'
+  },
+  {
+    title: 'Préparer un live Instagram pour le jour de ta sortie',
+    description: 'Le jour de ta sortie, tu donneras rendez-vous à ton audience pour un live où tu joueras ton titre, le présenteras, partageras son histoire et expliqueras ton message. \n\nCe live, de 10 minutes maximum, commencera par ton single, suivi d\'une reprise ou d\'un autre de tes titres, et se terminera par une deuxième interprétation de ton single en promo.\n\nPrépare cet événement : choisis l\'endroit (chambre, salon), teste le son, filme-toi pour des essais, et rédige ton discours à l\'avance. \n\nPrévois une liste des points clés à transmettre : le message de ta chanson, où l\'écouter, et une invitation à partager. Garde cette liste en visuel hors champ pour ne rien oublier.'
+  },
+  {
+    title: 'Analyser et optimiser ta campagne de pub trafic vers ton compte Insta',
+    description: 'Ta campagne de trafic vers ton compte Instagram tourne depuis une semaine. C\'est le bon moment pour faire un point : analyser les résultats obtenus, comprendre ce qui fonctionne (ou pas), et optimiser ce qui peut l\'être pour gagner en efficacité.',
+    youtubeUrl: 'https://youtu.be/IFzIfkPnPrY',
+    youtubeTitle: 'TUTO - Analyser et optimiser ta campagne vers ton compte Insta'
+  }
+],
+'-1': [
+  {
+    title: 'Sélectionner les médias sur GROOVER (Web Radio et presse uniquement)',
+    description: ''
+  },
+  {
+    title: 'Alternative ou complément Groover, lancer une campagne sur MUSOSOUP',
+    description: ''
+  },
+  {
+    title: '⭐️⭐️ Préparer et enregistrer une version acoustique ou remix de ton titre  ⭐️⭐️',
+    description: 'Là, on touche à un élément ultra stratégique de ta promo… et même de toute ta carrière : la construction de ta fan base solide.\n\nDepuis plusieurs semaines, tu t\'investis à fond : tu crées du contenu, tu postes, tu lances des pubs, tu gagnes des followers… et franchement, bravo pour ça ! \n\nC\'est une étape essentielle. Mais attention : un chiffre de followers, ça ne veut pas dire que tu as des fans.\n\nCe qui compte maintenant, c\'est de faire le tri entre les curieux et les vrais. Qui sont celles et ceux qui te soutiennent vraiment, qui veulent te voir réussir, qui seront là pour écouter ta musique, venir à tes concerts, acheter ton merch ou partager ta sortie ?\n\nEt surtout… comment garder le lien avec eux, sans dépendre des réseaux sociaux ?\n\nParce que soyons honnêtes :\n– Si demain tu te fais shadow-ban, plus personne ne voit tes posts.\n– Si Insta ou TikTok ferme (ou te ferme ton compte), tu perds tout.\n– Si tu te fais pirater, c\'est game over.\n\nTrop de dépendance. Zéro sécurité.\n\nC\'est pour ça que tu dois commencer à récolter les adresses mails des gens qui t\'aiment vraiment. Pour créer un lien direct avec eux, que rien ni personne ne pourra te retirer.\n\nEt pour ça, on va leur offrir un truc exclusif, rien qu\'à eux :\n👉 Une version acoustique inédite, un remix qui ne sortira jamais ailleurs, un morceau intime, un freestyle capté en one-shot… \n\nBref, une pépite qu\'ils ne trouveront ni sur Spotify, ni sur YouTube, ni sur Insta.\nEt tu leur offres gratuitement, en échange de leur mail.\n\nAu début, tu n\'auras peut-être que quelques contacts. Mais ce n\'est pas grave. Ce sont les fondations. Et je te garantis une chose : celles et ceux qui font cette démarche, ce sont tes vrais fans. Les plus précieux. Ceux qu\'il faudra bichonner.\n\nC\'est comme ça qu\'on construit une carrière durable.\nPas en jouant avec les algorithmes. En créant du lien.'
+  }
+],
+'0': [
+  {
+    title: '✅ LA CHECK LIST VEILLE DE SORTIE',
+    description: '- S\'assurer votre titre va bien sortir (sur Dibsteur)\n\n- Les messages de publication déjà pré-écris\n\n- Les campagnes playlist groover prêtes à être lancées'
+  },
+  {
+    title: 'Rédiger ton message de sortie',
+    description: 'C\'est le message qui va être associé à la publication qui va annoncer la sortie de ton titre\n\n🎙 Pourquoi ce message de sortie est si important\n\nQuand tu sors un morceau, tu ne vends pas juste un lien Spotify.\nTu ouvres une porte sur ton univers.\n\nCe message de sortie, c\'est le tout premier contact émotionnel entre ta chanson et le monde. Il ne s\'agit pas de "faire la promo" comme on vend une lessive, mais de partager une émotion, une histoire, un bout de toi.\n\nLes gens ne cliquent pas sur un lien parce qu\'on leur dit "écoute mon son",\nils cliquent parce qu\'ils se sentent touchés, curieux, compris, ou simplement parce qu\'ils se disent : « tiens, ce titre est peut-être pour moi. »\n\nCe message ne doit pas être dans la sollicitation, mais dans l\'invitation.\nPas "viens streamer", mais "je t\'offre une parenthèse".\nC\'est ça qui fait toute la différence. 💫',
+    externalUrl: 'https://www.canva.com/design/DAGtttkKqsw/mucwlsGMaEpQeJXVOYCGfw/edit?utm_content=DAGtttkKqsw&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Lien vers le texte à trou à compléter'
+  }
+],
+'1': [
+  {
+    title: 'Lancer une campagne de conversion pour booster tes streams Spotify avec tes miniclips',
+    description: 'Tu as déjà fait le plus important : tu as posté plusieurs mini-clips autour de ton morceau, en organique, avec régularité.\nRésultat ?\n➡️ Ton audience commence à entendre plusieurs fois le refrain\n➡️ Elle retient le son\n➡️ Elle s\'habitue à ta vibe\n➡️ Et elle commence à se dire : "mais il est trop cool ce morceau en vrai".\n\nMaintenant, place à l\'étape 2 : on transforme cette reconnaissance en écoute réelle sur Spotify.\n\n⸻\n\n🛠 Ce que tu dois faire maintenant :\n\n\t1.\tRepère les mini-clips qui ont le mieux fonctionné\n→ Ceux avec le plus de vues, de likes ou de commentaires.\n→ Ceux où les gens ont commencé à te dire "j\'ai ce refrain en tête".\n\n\t2.\tPrépare une campagne de pub sur Meta (Instagram/Facebook)\n→ Objectif : clics vers ton Smartlink (avec Spotify en priorité).\n→ Tu cibles les gens qui ressemblent à ceux qui ont déjà interagi.\n→ Tu peux même retargeter les gens qui ont vu tes Reels.',
+    youtubeUrl: 'https://youtu.be/UhtfoygyEb8',
+    youtubeTitle: '1. Créer ton SmartLink pub sur SubmitHub',
+    instagramUrl: 'https://youtu.be/PzavYeQIuyw',
+    instagramTitle: '2. Installer ton pixel dans ton Smart Link (utilise le même que celui de la playlist)',
+    externalUrl: 'https://youtu.be/2mfUsxXAV2U',
+    externalButtonText: '3. Lancer ta campagne de pub avec tes mini clip'
+  },
+  {
+    title: '🎯 Faire un check up de son univers promotionnel',
+    description: 'Ça y est ton titre est sorti, pose-toi cette question essentielle :\n👉 "Mon titre est sorti : qu\'est-ce qui, concrètement, est en train de travailler pour moi en ce moment ?"\n\nSi tu ne peux pas répondre clairement, c\'est que tu manques de vision stratégique.\n\nCette tâche consiste à faire l\'inventaire des leviers promotionnels que tu utilises (ou pas) pour promouvoir ta musique. C\'est un moment clé pour prendre du recul et identifier ce qui est actif, ce qui ne l\'est pas, et ce qui mérite d\'être optimisé ou lancé.',
+    externalUrl: 'https://www.canva.com/design/DAGq5GI3y20/wi-kw5bJsQRQ-l1ihNn57w/view?utm_content=DAGq5GI3y20&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h631d206188',
+    externalButtonText: 'Voir l\'univers visuel de ta promo'
+  }
+],
+'2': [
+  {
+    title: 'Template teasing pour évènement de fin de promo',
+    description: 'Les gens ont toutes les raisons du monde d\'oublier ta date. Il faut maintenir leur attention en maintenant un teasing',
+    externalUrl: 'https://www.canva.com/design/DAF8HQPGOY4/LhttxJsbuQ3uQyMT1UJmbQ/edit?utm_content=DAF8HQPGOY4&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Voir les story tu teasing à la suite'
+  },
+  {
+    title: 'Préparer une version acoustique de ton single, un remix ou un contenu exclusif',
+    description: ''
+  },
+  {
+    title: 'Créer une vidéo de storytelling en utilisant le voyage du héros',
+    description: 'Là, c\'est la pépite de tous tes contenus.\n\nIl coche toutes les cases :\n🎯 découverte\n❤️ connexion\n🔥 amour\n🚀 promotion\n\nC\'est la masterclass du contenu. Tu dois absolument l\'utiliser pour renforcer le lien dans le parcours du fan, pour faire passer les gens d\'un simple "j\'aime bien ce qu\'il/elle fait" à "je me sens proche, j\'ai envie de le/la soutenir".\n\nCe type de contenu, c\'est du carburant pour créer une vraie communauté autour de toi. Ne le laisse pas passer.',
+    externalUrl: 'https://indiemusician.my.canva.site/le-storytelling',
+    externalButtonText: 'Comment créer ton Storytelling'
+  },
+  {
+    title: 'Faire les répétitions pour ton évènement de fin de promo',
+    description: 'Ben ouais... ça parait logique 😅\n\nMaitrise tes morceaux en live\nTravail ton look sur scene\nréflechis à tes messages'
+  }
+],
+'3': [
+  {
+    title: 'Assurer le concert de fin de promo',
+    description: ''
+  },
+  {
+    title: 'Créer ton portail de téléchargement avec Wix',
+    description: 'Allez c\'est parti, voici le tuto complet pour mettre en place ton portail de téléchargement et d\'acquisition de mail.',
+    youtubeUrl: 'https://www.youtube.com/watch?v=LgIppH478fU&list=PLJyQbZa40vH6oGGxbqJvmAb67_axy-gDj&pp=gAQB',
+    youtubeTitle: 'TUTO - Créer ton portail de téléchargement avec Wix'
+  },
+  {
+    title: 'Faire la promo de ton cadeau auprès de tes followers',
+    description: 'Tu vas d\'abord poster une story en organique pour proposer ton cadeau à ta communauté.\nMais attention : tous tes followers ne verront pas cette story (merci l\'algorithme…).\n\n👉 Pour t\'assurer que ton message arrive vraiment jusqu\'à eux, on va mettre en place une promo ultra ciblée pendant 48h, uniquement vers tes abonnés Instagram.\n\n🎯 Objectif :\nToucher uniquement ceux qui te suivent déjà, sans matraquage ni démarchage.\n\n⚠️ Important :\nPas plus de 48h. Au-delà, ça devient lourd, tu risques d\'agacer et de perdre des abonnés.',
+    youtubeUrl: 'https://youtu.be/TzQJzrHp4ng',
+    youtubeTitle: 'TUTO - Lancer ta campagne Followers de 48h',
+    externalUrl: 'https://www.canva.com/design/DAGa2dT-DcI/5zeNekQUep1pFrCDmg2xMQ/edit?utm_content=DAGa2dT-DcI&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Voir le template'
+  }
+],
+              },
+              fan: {
+                '-3': [
+  {
+    title: '❤️ CONNEXION : (Story) - Partage d\'une journée type de création musicale.',
+    description: 'Plusieurs stories postées tout au long de la journée, pour nous emmener avec toi en répète, en concert, en studio… ou ailleurs.\n\nL\'idée : partager des instants de ta journée en mode coulisses, pour créer de la proximité et donner l\'impression qu\'on est avec toi.'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels) - Le kiff de l\'écoute de ton propre son',
+    description: 'Voir un artiste kiffer sa propre musique, ça donne envie d\'écouter.\nC\'est contagieux, authentique, et ça pousse les gens à liker, partager, commenter.',
+    externalUrl: 'https://indiemusician.my.canva.site/le-kiff-de-lecoute-de-son-propre-son',
+    externalButtonText: 'Exemple de contenu'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels) - Un reels à connexion émotionnel',
+    description: 'Trouve une accroche émotionnelle forte dans laquelle ton audience va se reconnaître\n\nTu ne cherches pas juste à "faire une belle phrase" : tu veux toucher. Pour ça, ton accroche doit parler d\'eux, pas de toi.',
+    youtubeUrl: 'https://indiemusician.my.canva.site/methode-complete-pour-creer-une-accroche-emotionnelle-qui-concerne',
+    youtubeTitle: 'Méthode pour trouver une accroche émotionnelle forte',
+    instagramUrl: 'https://youtu.be/3mBEam8uw18?si=7fwYYtReTEhZLXnm',
+    instagramTitle: 'TUTO - Monter ta vidéo à connexion émotionnelle',
+    externalUrl: 'https://indiemusician.my.canva.site/le-contenu-connexion-motionnelle',
+    externalButtonText: 'Exemple de contenu à connexion émotionnelle'
+  },
+  {
+    title: '❤️ CONNEXION : (Feed) - Une photo de toi en studio en train d\'enregistrer',
+    description: 'Cette photo va apparaître dans ton feed. Elle doit donc s\'accorder avec ta charte graphique...\n\n👉 En légendes de cette publication :\nExplique que tu es en pleine finalisation de l\'enregistrement\nde ton prochain titre qui va bientôt sortir "hâte de vous en dire plus !"'
+  }
+], 
+                '-2': [
+  {
+    title: '❤️ CONNEXION : (Story) - Demande à ton audience de t\'aider à choisir ta pochette',
+    description: 'Poste une Story dans laquelle tu vas présenter plusieurs projets de pochette pour ton prochain single. \n\nDemande l\'avis à ta communauté en utilisant l\'option Sondage'
+  },
+  {
+    title: '❤️ CONNEXION : (Story) - Le lendemain post la pochette qui a gagné et remercie',
+    description: ''
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels) Tourne une vidéo cover "J\'ai repris (titre) de (artiste) à ma sauce"',
+    description: ''
+  },
+  {
+    title: '❤️ CONNEXION : (Feed carrousel) - "Le step-by-step de ma création d\'une chanson" (chaque slide = une étape)',
+    description: 'Ce carrousel est un contenu de connexion. Lors de sa publication, pense à ajouter une légende personnelle : raconte ce que représente la créativité pour toi, à quel moment elle naît, dans quelles circonstances elle s\'exprime le plus facilement… L\'idée, c\'est de créer un lien sincère avec ceux qui te lisent.'
+  }
+], 
+                '-1': [
+  {
+    title: '📢 PROMO (Story et feed) Annoncer la date de sortie de ton single',
+    description: ''
+  },
+  {
+    title: '⭐️ Template Canva "Annonce sortie présave" (Story)',
+    description: '',
+    externalUrl: 'https://www.canva.com/design/DAF7eYY-myk/oTEDYo7CIjxusj-N7JlhoA/edit?utm_content=DAF7eYY-myk&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Voir le template'
+  },
+  {
+    title: '⭐️ Template Canva "Annonce sortie présave" (Feed avec carrousel)',
+    description: 'Dans ce carrousel, pense à inclure :\n- la mini vidéo avec un extrait de ton prochain single,\n- plusieurs photos de toi en studio ou pendant la phase d\'écriture.\n\nEt dans la légende, raconte un peu plus que d\'habitude :\nexplique que ton nouveau single sort bientôt, que tu es impatient·e de le partager, et surtout, parle du sujet qu\'il aborde. Ce que tu avais sur le cœur en l\'écrivant, ce que tu espères que ça fasse ressentir… Crée un lien.\n\nTu peux conclure par un petit teasing du genre :\n\n"J\'ai hâte de vous en dire plus dans les prochains jours…"',
+    externalUrl: 'https://www.canva.com/design/DAGj70A7B9I/6P3oxb8zywaryX3u801YMQ/edit?utm_content=DAGj70A7B9I&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Voir le template'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels) Ton premier mini-clip à connexion émotionnelle',
+    description: '',
+    instagramUrl: 'https://www.instagram.com/reel/Cx5lyCVIImA/?igshid=MWV4dDFwMjRkd2dsbQ%3D%3D',
+    instagramTitle: 'Voir un exemple de contenu'
+  },
+  {
+    title: '❤️ CONNEXION : (Feed) - Une photo de ton instrument préféré',
+    description: 'légende : "Pourquoi je ne peux pas m\'en passer, ce qu\'il représente pour moi, etc....".'
+  }
+], 
+                '0': [
+  {
+    title: 'Lundi : (2 Story) pour annoncer la sortie de ton titre + ton live Insta',
+    description: 'Story 1 : Poster une vidéo dans laquelle tu t\'expimes face cam pour dire à quel point tu as hâte que ton titre sorte et que tu les invite à ton live insta le soir de la sortie de ton titre\n\nStory 2 : Poster le visuel qui annonce ton live insta',
+    youtubeUrl: 'https://www.canva.com/design/DAF7jXRYFJY/X8ZGi9JPLqtW9S_wllnsTw/edit?utm_content=DAF7jXRYFJY&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    youtubeTitle: 'Template Story du live Insta',
+    instagramUrl: 'https://www.canva.com/design/DAF7i-HuH3Y/0PlU6s7K1fumxNLOXkgM4w/edit?utm_content=DAF7i-HuH3Y&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    instagramTitle: 'Template Feed du live insta (à poster en photo)',
+    externalUrl: 'https://www.canva.com/design/DAGCrH7xVc4/JlYx3X3JcorByvyZqruA4A/edit?utm_content=DAGCrH7xVc4&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Exemple des 2 story à la suite'
+  },
+  {
+    title: 'Mardi : (Feed) Poster une photo des paroles de ton titre / Capture écran MAO',
+    description: 'Poster une photo des paroles de ton titre pour rappeler que ça sort bientôt. \n\nPour les prod : une capture écran de tes pistes MAO pour annoncer que vous allez bientôt entendre ce que ça donne'
+  },
+  {
+    title: 'Mercredi : (Reels) Le MINI CLIP VIDEO : Post un deuxième mini clip',
+    description: ''
+  },
+  {
+    title: 'Jeudi : (Story) Reposter le visuel de l\'annonce du live le soir du jour de la sortie',
+    description: ''
+  }
+],
+'1': [
+  {
+    title: '📢 PROMO : (Story) Relayer en Story toutes les retombées, presse et playlist de ta campagne promo',
+    description: 'Tu as eu des retombées presse web ou papier ? Tu passes en web radio ? Tu as été ajouté à des playlists ? Trop cool. Maintenant, il faut relayer.\n\nPourquoi ?\n\nD\'abord, pour construire une vraie relation presse. Fais des captures d\'écran des articles, des radios où tu passes ou des playlists qui t\'ont ajouté. \n\nEt à chaque fois, poste-les en story en taguant le média, avec un lien vers l\'article, la radio ou la playlist. Les médias apprécieront, et tu auras plus de chances qu\'ils reparlent de toi pour ta prochaine actu.\n\nEnsuite, ça crée une impression de buzz. Même si ce sont de petits médias, les gens qui te suivent vont se dire :\n\n"Mais c\'est ouf, il/elle est partout en ce moment, il se passe un truc là !"\n\nEt ça, c\'est puissant. On adore suivre les artistes qui montent.'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels) LE MINI CLIP VIDÉO (POV) : J\'ai écrit une chanson qui parle de...',
+    description: 'Un mini clip, mais monté comme un contenu à connexion émotionnelle avec une accroche',
+    instagramUrl: 'https://www.instagram.com/reel/C5JjQEesw40/',
+    instagramTitle: 'Exemple du contenu'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels) Tu comptes sur insta pour te faire découvrir',
+    description: 'Ici il s\'agit de créer de l\'empathie pour donner envie de te suivre tout en faisant découvrir ta musique',
+    instagramUrl: 'https://www.instagram.com/reel/C3no7EwIHPD/?utm_source=ig_embed',
+    instagramTitle: 'Exemple de contenu'
+  },
+  {
+    title: '❤️ CONNEXION : (Story) Une vidéo de toi en répét pour ton évènement de fin de promo',
+    description: 'Chaque occasion est bonne pour rappeler que ton événement de fin de promo approche.\n\nProfite des stories "coulisses" — répétitions, balances, préparation, petits stress ou moments de joie — pour créer du lien avec ton audience tout en glissant un rappel : la date approche, il reste des places, ou "j\'ai trop hâte de vous retrouver ce soir".\n\nÇa ne doit pas être une annonce froide, mais un partage sincère de ce que tu vis. Les gens aiment suivre ce genre de moments, ça les implique émotionnellement. Et plus ils se sentent impliqués, plus ils auront envie d\'être là.'
+  },
+  {
+    title: '📢 TEMPLATE PROMO : (Story vendredi) Annoncer ton évènement de fin de promo',
+    description: 'On est sympa on t\'a créé des templates que tu peux adapter à ta direction artistique. Tu n\'as qu\'à choisir celui qui te correspond le mieux.',
+    externalUrl: 'https://www.canva.com/design/DAF-FcZHFwg/aVgoK4NAXcDnoEFF0H2IzQ/edit?utm_content=DAF-FcZHFwg&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Template pour annoncer ton évenement'
+  }
+],
+'2': [
+  {
+    title: '❤️ CONNEXION : (Reels) - Une vidéo dans laquelle tu partages tes premières impressions sur la sortie de ton titre',
+    description: 'C\'est le moment de remercier ton audience et de mettre en avant les meilleurs commentaires que tu as reçu.\n\nC\'est simple, tu te filmes en train de sourire et dire merci en affichant les captures écrans de tes commentaires les plus sympas. Et en fond sonore, ton titre bien sur ;)',
+    externalUrl: 'https://www.canva.com/design/DAGtuO6TgE8/1F0UGx71vN0AoFrfE3u-Sw/watch?utm_content=DAGtuO6TgE8&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h29d1e4e1f6',
+    externalButtonText: 'Voir l\'exemple de contenu'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels lundi) Un de tes mini-clips Vidéo',
+    description: 'yes encore un mini clip.\n\nIl faut qu\'on te mémorise',
+    externalUrl: 'https://indiemusician.my.canva.site/le-mini-clip',
+    externalButtonText: 'Exemples de mini clips'
+  },
+  {
+    title: '❤️ CONNEXION (Story) : À J-10 de ton évènement de fin de promo, commence ton teasing',
+    description: 'le teasing commence !',
+    externalUrl: 'https://www.canva.com/design/DAF8HQPGOY4/LhttxJsbuQ3uQyMT1UJmbQ/edit?utm_content=DAF8HQPGOY4&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Rappel du teasing'
+  },
+  {
+    title: '✨ DÉCOUVERTE : (Reels jeudi) Un de tes mini-clips Vidéo',
+    description: 'oui..., encore un 🚀🤘'
+  },
+  {
+    title: '❤️ CONNEXION et DÉCOUVERTE : (Reels) (vendredi) Poster ta vidéo de story telling',
+    description: ''
+  }
+],
+'3': [
+  {
+    title: '(Lundi )DECOUVERTE : (Reels) Un de tes minis clips Vidéo',
+    description: ''
+  },
+  {
+    title: '📢 PROMO  :  (2 story) poster en story le lien de téléchargement de ta version acoustique',
+    description: 'Story 1 : Une vidéo face cam dans laquelle tu dis "Ça fait déjà quelques semaines que mon titre est sorti… et franchement, je m\'attendais pas à autant de retours. Pour moi, c\'est dingue. Merci du fond du cœur pour tout votre soutien 🙏\n\nPour vous remercier, j\'ai envie de vous offrir un petit cadeau : une version acoustique (ou remix) du morceau. Elle ne sortira nulle part ailleurs, c\'est un exclu juste pour vous.\n\nCliquez sur le lien dans la story suivante pour la recevoir gratuitement.\n\nEncore merci, vous êtes incroyables. Vraiment. Bisous ❤️"\n\nStory 2 : Le visuel du téléchargement de ton exclu avec le lien de téléchargement dans la story (voir le template)',
+    externalUrl: 'https://www.canva.com/design/DAGa2dT-DcI/5zeNekQUep1pFrCDmg2xMQ/edit?utm_content=DAGa2dT-DcI&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+    externalButtonText: 'Lien vers le template'
+  }
+],
+              }
+            };
+            
+            const tasks = defaultTasks[type][weekOffset.toString()] || [];
+            return tasks.map((task, index) => ({ 
+  id: type + '-' + weekOffset + '-' + index, 
+  title: typeof task === 'string' ? task : task.title || '', 
+  completed: false, 
+  description: typeof task === 'string' ? '' : task.description || '',
+  youtubeUrl: typeof task === 'string' ? '' : task.youtubeUrl || '',
+  youtubeTitle: typeof task === 'string' ? '' : task.youtubeTitle || '',
+  instagramUrl: typeof task === 'string' ? '' : task.instagramUrl || '',
+  instagramTitle: typeof task === 'string' ? '' : task.instagramTitle || '',
+  externalUrl: typeof task === 'string' ? '' : task.externalUrl || '',
+  externalButtonText: typeof task === 'string' ? '' : task.externalButtonText || '',
+  files: typeof task === 'string' ? [] : task.files || []
+}));
+          };
+
+          // Tâches spécifiques pour le jour J
+          const generateReleaseDayTasks = (type) => {
+  const tasks = type === 'todo' ? [
+    {
+      title: 'Créer ton smart link avec SubmitHub',
+      description: 'Dis-toi bien une chose : personne ne va prendre le temps de chercher comment écouter ta musique. \n\nCe n\'est pas par méchanceté, c\'est juste la réalité d\'Internet — on zappe vite. Si tu veux que les gens t\'écoutent, tu dois leur mâcher le travail. C\'est là que ton Smartlink entre en jeu.\n\nC\'est le seul et unique lien que tu dois partager partout : bio Instagram, description YouTube, signature d\'email, stories, etc. \n\nIl doit contenir tous les liens d\'écoute vers les principales plateformes de streaming (Spotify, Apple Music, Deezer, etc.), pour que peu importe où ton public écoute sa musique, il y ait un accès direct.',
+      youtubeUrl: 'https://youtu.be/D8QD_bosVDs',
+      youtubeTitle: 'TUTO - Créer ton smart link avec SubmitHub'
+    },
+    {
+      title: 'Placer le lien de ton smartlink dans ta bio Insta',
+      description: ''
+    },
+    {
+      title: 'Placer ton titre en position numéro deux dans ta playlist de mood',
+      description: 'Il y a quelques semaines, tu as lancé une campagne pour augmenter le nombre de sauvegardes de ta playlist. Aujourd\'hui, c\'est le moment de récolter les fruits de cet investissement.\n\nPeu importe où tu en es dans le développement de ta playlist — que tu débutes ou que tu aies déjà une base solide — profite de cette dynamique : place ton morceau en position n°2. \n\nC\'est l\'endroit stratégique, juste après l\'ouverture, là où l\'attention est encore bien présente. C\'est le meilleur moyen de capter l\'écoute et de booster naturellement ton nombre de streams.'
+    },
+    {
+      title: 'Lancer campagne Groover playlist uniquement',
+      description: ''
+    },
+    {
+      title: 'Assurer le live insta le soir',
+      description: 'Tu dois prévoir une petite liste des choses auxquelles tu dois penser au moment de ton live.\n\nPremièrement, explique aux gens que ton titre est sorti et comment faire pour aller écouter ton titre en leur indiquant que ton titre est dans ta biographie Instagram.\n\nDeuxièmement, prends le temps de leur expliquer de quoi parle ton titre présente leur ton titre de manière sincère et authentique.\n\nTroisièmement n\'oublie pas de leur demander de partager le lien d\'écoute de ton titre car ces personnes-là vont être tes ambassadeurs ou tes ambassadrices'
+    }
+  ] : [
+    {
+      title: 'Annoncer la sortie partout en diffusant le smartlink',
+      description: '🚀 Ne sous-estime jamais la force de ton premier cercle\n\nTa communauté, même petite, est une force précieuse.\nTes réseaux sociaux, ta liste email, tes contacts WhatsApp… tout cet écosystème est là pour t\'aider à faire circuler ta musique. Et c\'est à toi de l\'activer.\n\nMais ne t\'arrête pas là. Parle-en à tout le monde.\nTes amis, ta famille, tes collègues, ton coiffeur, ton cordonnier, ton dentiste. Oui, même ton dentiste doit savoir que ton nouveau titre est sorti — et comment l\'écouter.'
+    },
+    {
+      title: '📢 PROMO : 2 Story pour annoncer la sortie de ton titre',
+      description: 'Story 1 : Une vidéo face cam dans laquelle tu annonces la sortie de ton titre et où tu rappelles que ton live insta c\'est ce soir ! Sur cette story ajoute un stickers lien "Ecouter maintenant" qui renvoie vers ton SmartLink.\n\nStory 2 : Reposte le visuel qui annonce ton live',
+      externalUrl: 'https://www.canva.com/design/DAGCrQ3m4GA/gZorefqD4xUsK2u9n8Vk1w/edit?utm_content=DAGCrQ3m4GA&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+      externalButtonText: 'Exemple des deux stories à la suite'
+    },
+    {
+      title: '❤️ CONNEXION, DÉCOUVERTE & PROMO : TON POST DE SORTIE (Reels) Une vidéo de toi en train de chanter ton titre en studio',
+      description: 'Dans la légende, poste ton message de sortie.',
+      externalUrl: 'https://www.canva.com/design/DAGtttkKqsw/mucwlsGMaEpQeJXVOYCGfw/edit?utm_content=DAGtttkKqsw&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
+      externalButtonText: 'Lien vers le texte à trou à compléter'
+    }
+  ];
+  
+  return tasks.map((task, index) => ({
+    id: 'release-day-' + type + '-' + index,
+    title: task.title,
+    completed: false,
+    description: task.description || '',
+    youtubeUrl: task.youtubeUrl || '',
+    youtubeTitle: task.youtubeTitle || '',
+    instagramUrl: task.instagramUrl || '',
+    instagramTitle: task.instagramTitle || '',
+    externalUrl: task.externalUrl || '',
+    externalButtonText: task.externalButtonText || '',
+    files: []
+  }));
+};
+
+          // Tâches pour le bilan de promotion
+          const generateBilanTasks = () => {
+            const tasks = [
+              'Combien de followers as-tu gagné ?',
+              'Quels sont les types de contenu qui ont eu le plus de succès ? Pourquoi ?',
+              'Combien d\'écoutes sur ton titre ?',
+              'Quelle est l\'audience pub la plus performante pour toi ?',
+              'Combien de mails as-tu récoltés ?',
+              'Quelle est selon toi la partie de ton message, de ta personnalité qui touche le plus ton audience ?',
+              'Budget - Combien as-tu dépensé pour ta promo ?'
+            ];
+            
+            return tasks.map((task, index) => ({
+              id: 'bilan-promo-' + index,
+              title: task,
+              completed: false,
+              description: '',
+              youtubeUrl: '',
+              youtubeTitle: '',
+              instagramUrl: '',
+              instagramTitle: '',
+              externalUrl: '',
+              externalButtonText: '',
+              files: []
+            }));
+          };
+// Effet pour générer les semaines quand une date est sélectionnée
+          useEffect(() => {
+            if (releaseDate && weeks.length === 0) {
+              setWeeks(generateWeeks(releaseDate));
+            }
+          }, [releaseDate]);
+
+          // Charger automatiquement au démarrage
+          useEffect(() => {
+            loadFromLocalStorage();
+          }, []);
+
+          // Sauvegarder automatiquement à chaque changement
+          useEffect(() => {
+            if (projectCode && weeks.length > 0) {
+              saveToLocalStorage();
+            }
+          }, [weeks, projectCode, projectName, releaseDate]);
+
+          // Sauvegarder automatiquement dans le navigateur
+          const saveToLocalStorage = () => {
+            if (projectCode) {
+              const dataToSave = {
+                projectName: projectName,
+                releaseDate: releaseDate,
+                projectCode: projectCode,
+                weeks: weeks,
+                savedAt: new Date().toISOString()
+              };
+              localStorage.setItem('musicPlannerProject', JSON.stringify(dataToSave));
+            }
+          };
+
+          // Charger automatiquement depuis le navigateur
+          const loadFromLocalStorage = () => {
+            try {
+              const saved = localStorage.getItem('musicPlannerProject');
+              if (saved) {
+                const data = JSON.parse(saved);
+                setProjectName(data.projectName);
+                setReleaseDate(data.releaseDate);
+                setProjectCode(data.projectCode);
+                setWeeks(data.weeks);
+                return true;
+              }
+            } catch (error) {
+              console.log('Pas de projet sauvegardé');
+            }
+            return false;
+          };
+
+          // Ajouter une semaine personnalisée
+   const addCustomWeek = (templateId, weekOffset, customTitle = null) => {
+            const template = getWeekTemplates().find(t => t.id === templateId);
+            if (!template) return;
+            
+            const existingOffsets = weeks.map(w => w.weekOffset);
+            if (existingOffsets.includes(weekOffset)) {
+              alert('Une semaine existe déjà à cette position');
+              return;
+            }
+            
+            const customWeeks = weeks
+              .filter(w => w.isCustomWeek)
+              .map(w => ({weekOffset: w.weekOffset, templateId: w.templateId, templateName: w.templateName}));
+            
+           const weekTitle = customTitle || template.name;
+customWeeks.push({weekOffset: weekOffset, templateId: templateId, templateName: weekTitle});
+            setWeeks(generateWeeks(releaseDate, customWeeks));
+            setShowWeekTemplateModal(false);
+setCustomWeekTitle('');
+          };
+
+          const removeCustomWeek = (weekId) => {
+            if (confirm('Supprimer cette semaine personnalisée ?')) {
+              const weekToRemove = weeks.find(w => w.id === weekId);
+              if (!weekToRemove || !weekToRemove.isCustomWeek) return;
+              
+              const remainingCustomWeeks = weeks
+                .filter(w => w.isCustomWeek && w.id !== weekId)
+                .map(w => ({weekOffset: w.weekOffset, templateId: w.templateId, templateName: w.templateName}));
+              
+              setWeeks(generateWeeks(releaseDate, remainingCustomWeeks));
+            }
+          };
+
+          const moveWeek = (weekId, newOffset) => {
+            const weekToMove = weeks.find(w => w.id === weekId);
+            if (!weekToMove || !weekToMove.isCustomWeek) return;
+            
+            const existingOffsets = weeks.filter(w => w.id !== weekId).map(w => w.weekOffset);
+            if (existingOffsets.includes(newOffset)) {
+              alert('Cette position est déjà occupée');
+              return;
+            }
+            
+            const customWeeks = weeks
+              .filter(w => w.isCustomWeek)
+              .map(w => ({
+                weekOffset: w.id === weekId ? newOffset : w.weekOffset,
+                templateId: w.templateId,
+                templateName: w.templateName
+              }));
+            
+            setWeeks(generateWeeks(releaseDate, customWeeks));
+          };
+
+          // Exporter les données du planning au format JSON
+          const exportData = () => {
+            const dataToExport = { 
+              projectName: projectName, 
+              releaseDate: releaseDate, 
+              projectCode: projectCode, 
+              weeks: weeks, 
+              exportDate: new Date().toISOString(), 
+              version: '2.0',
+              metadata: {
+                totalTasks: weeks.reduce((total, week) => total + week.todoTasks.length + week.fanTasks.length, 0),
+                completedTasks: weeks.reduce((total, week) => {
+                  const completed = week.todoTasks.filter(t => t.completed).length + week.fanTasks.filter(t => t.completed).length;
+                  return total + completed;
+                }, 0)
+              }
+            };
+            
+            try {
+              const jsonString = JSON.stringify(dataToExport, null, 2);
+              const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = (projectName || 'planning') + '-' + (projectCode || 'EXPORT') + '-' + new Date().toISOString().split('T')[0] + '.json';
+              a.style.display = 'none';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              
+              // Confirmation visuelle
+              alert('✅ Planning téléchargé avec succès !\n\n📂 Fichier: ' + a.download + '\n📊 ' + dataToExport.metadata.totalTasks + ' tâches sauvegardées');
+            } catch (error) {
+              console.error('Erreur lors du téléchargement:', error);
+              alert('❌ Erreur lors du téléchargement. Veuillez réessayer.');
+            }
+          };
+
+          // Importer un planning depuis un fichier JSON
+          const importData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              try {
+                const importedData = JSON.parse(e.target.result);
+                if (importedData.projectName && importedData.weeks) {
+                  setProjectName(importedData.projectName);
+                  setReleaseDate(importedData.releaseDate);
+                  setProjectCode(importedData.projectCode);
+                  setWeeks(importedData.weeks);
+                  setShowImportModal(false);
+                  alert('✅ Planning importé avec succès !');
+                } else {
+                  alert('❌ Fichier invalide. Veuillez sélectionner un fichier de planning valide.');
+                }
+              } catch (error) {
+                alert('❌ Erreur lors de la lecture du fichier. Vérifiez que c\'est un fichier JSON valide.');
+              }
+            };
+            reader.readAsText(file);
+          };
+
+          // Créer un nouveau projet
+          const createNewProject = () => {
+            if (projectName && releaseDate) {
+                const newCode = generateProjectCode();
+                setProjectCode(newCode);
+                setWeeks(generateWeeks(releaseDate));
+                saveToLocalStorage();
+                setShowProjectEdit(false);
+            }
+          };
+
+          // Mettre à jour la date de sortie du projet
+          const updateProjectDate = (newDate) => {
+  setReleaseDate(newDate);
+  if (newDate && projectCode) {
+    // Sauvegarder l'état actuel des semaines avec leurs modifications
+    const currentWeeksState = weeks.map(week => ({
+      ...week,
+      // Préserver les tâches modifiées
+      todoTasks: week.todoTasks || [],
+      fanTasks: week.fanTasks || [],
+      youtubeReplayUrl: week.youtubeReplayUrl || ''
+    }));
+    
+    // Sauvegarder les semaines personnalisées
+    const customWeeks = weeks
+      .filter(w => w.isCustomWeek)
+      .map(w => ({
+        weekOffset: w.weekOffset, 
+        templateId: w.templateId, 
+        templateName: w.templateName
+      }));
+    
+    // Regénérer avec les semaines personnalisées
+    const newWeeks = generateWeeks(newDate, customWeeks);
+    
+    // Fusionner avec l'état sauvegardé pour garder les modifications
+    const mergedWeeks = newWeeks.map(newWeek => {
+      const existingWeek = currentWeeksState.find(w => 
+        w.weekOffset === newWeek.weekOffset && 
+        (w.templateId === newWeek.templateId || (!w.templateId && !newWeek.templateId))
+      );
+      
+      if (existingWeek) {
+        return {
+          ...newWeek,
+          todoTasks: existingWeek.todoTasks,
+          fanTasks: existingWeek.fanTasks,
+          youtubeReplayUrl: existingWeek.youtubeReplayUrl
+        };
+      }
+      return newWeek;
+    });
+    
+    setWeeks(mergedWeeks);
+    setTimeout(() => saveToLocalStorage(), 100);
+  }
+};
+
+          // Réinitialiser complètement le projet
+          const resetProject = () => {
+            if (confirm('⚠️ Êtes-vous sûr de vouloir créer un nouveau projet ? Toutes les données actuelles seront perdues.')) {
+              setProjectName('');
+              setReleaseDate('');
+              setProjectCode('');
+              setWeeks([]);
+              setShowProjectEdit(false);
+            }
+          };
+
+          // Ouvrir le modal de création/modification de tâche
+          const openTaskModal = (task, weekId, taskType) => {
+            setShowTaskDetail(null);
+            setEditingTask(task);
+            setEditingWeekId(weekId);
+            setEditingTaskType(taskType);
+            
+            if (task) {
+              // Mode édition - remplir les champs avec les données existantes
+              setTaskTitle(task.title || '');
+              setTaskDescription(task.description || '');
+              setTaskYouTube(task.youtubeUrl || '');
+              setTaskYouTubeTitle(task.youtubeTitle || '');
+              setTaskInstagram(task.instagramUrl || '');
+              setTaskInstagramTitle(task.instagramTitle || '');
+              setTaskExternalUrl(task.externalUrl || '');
+              setTaskExternalButtonText(task.externalButtonText || '');
+              setTaskFiles(task.files || []);
+            } else {
+              // Mode création - vider tous les champs
+              setTaskTitle(''); 
+              setTaskDescription(''); 
+              setTaskYouTube('');
+              setTaskYouTubeTitle('');
+              setTaskInstagram('');
+              setTaskInstagramTitle('');
+              setTaskExternalUrl('');
+              setTaskExternalButtonText('');
+              setTaskFiles([]);
+            }
+            setShowTaskModal(true);
+          };
+          
+          // Fermer le modal de tâche
+          const closeTaskModal = () => {
+            setShowTaskModal(false);
+            setEditingTask(null); 
+            setEditingWeekId(null); 
+            setTaskTitle(''); 
+            setTaskDescription(''); 
+            setTaskYouTube('');
+            setTaskYouTubeTitle('');
+            setTaskInstagram('');
+            setTaskInstagramTitle('');
+            setTaskExternalUrl('');
+            setTaskExternalButtonText('');
+            setTaskFiles([]);
+          };
+
+          // Sauvegarder une tâche (création ou modification)
+          const saveTask = () => {
+            if (!taskTitle.trim()) {
+              alert('Le titre de la tâche est obligatoire');
+              return;
+            }
+            
+            const taskData = {
+              id: editingTask ? editingTask.id : 'task-' + Date.now(),
+              title: taskTitle.trim(),
+              completed: editingTask ? editingTask.completed : false,
+              description: taskDescription.trim(),
+              youtubeUrl: taskYouTube.trim(),
+              youtubeTitle: taskYouTubeTitle.trim(),
+              instagramUrl: taskInstagram.trim(),
+              instagramTitle: taskInstagramTitle.trim(),
+              externalUrl: taskExternalUrl.trim(),
+              externalButtonText: taskExternalButtonText.trim(),
+              files: taskFiles
+            };
+            
+            const newWeeks = weeks.map(week => {
+              if (week.id === editingWeekId) {
+                const taskListKey = editingTaskType === 'todo' ? 'todoTasks' : 'fanTasks';
+                if (editingTask) {
+                  // Modification d'une tâche existante
+                  const updatedTasks = week[taskListKey].map(t => t.id === editingTask.id ? taskData : t);
+                  return Object.assign({}, week, { [taskListKey]: updatedTasks });
+                } else {
+                  // Création d'une nouvelle tâche
+                  const updatedTasks = week[taskListKey].concat([taskData]);
+                  return Object.assign({}, week, { [taskListKey]: updatedTasks });
+                }
+              }
+              return week;
+            });
+            
+            setWeeks(newWeeks);
+            saveToLocalStorage();
+            closeTaskModal();
+          };
+
+          // Dupliquer une tâche
+          const duplicateTask = (task, weekId, taskType) => {
+            const duplicatedTask = Object.assign({}, task, {
+              id: 'task-' + Date.now(),
+              title: task.title + ' (copie)',
+              completed: false
+            });
+            
+            const newWeeks = weeks.map(week => {
+              if (week.id === weekId) {
+                const taskList = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
+                return Object.assign({}, week, { 
+                  [taskList]: week[taskList].concat([duplicatedTask])
+                });
+              }
+              return week;
+            });
+            setWeeks(newWeeks);
+            saveToLocalStorage();
+          };
+
+          // Supprimer une tâche
+          const deleteTask = (taskId, weekId, taskType) => {
+            setWeeks(prevWeeks => prevWeeks.map(week => {
+              if (week.id === weekId) {
+                const taskListKey = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
+                const filteredTasks = week[taskListKey].filter(task => task.id !== taskId);
+                return Object.assign({}, week, { [taskListKey]: filteredTasks });
+              }
+              return week;
+            }));
+            saveToLocalStorage();
+            setShowTaskDetail(null);
+          };
+
+          // Cocher/décocher une tâche
+          const toggleTaskCompleted = (taskId, weekId, taskType) => {
+            const newWeeks = weeks.map(week => {
+              if (week.id === weekId) {
+                const taskList = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
+                return Object.assign({}, week, {
+                  [taskList]: week[taskList].map(task => 
+                    task.id === taskId ? Object.assign({}, task, { completed: !task.completed }) : task
+                  )
+                });
+              }
+              return week;
+            });
+            setWeeks(newWeeks);
+            saveToLocalStorage();
+          };
+
+          // Déplacer une tâche vers le haut
+          const moveTaskUp = (taskIndex, weekId, taskType) => {
+            if (taskIndex === 0) return;
+            
+            const newWeeks = weeks.map(week => {
+              if (week.id === weekId) {
+                const taskList = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
+                const tasks = [...week[taskList]];
+                const temp = tasks[taskIndex];
+                tasks[taskIndex] = tasks[taskIndex - 1];
+                tasks[taskIndex - 1] = temp;
+                return Object.assign({}, week, { [taskList]: tasks });
+              }
+              return week;
+            });
+            setWeeks(newWeeks);
+            saveToLocalStorage();
+          };
+
+          // Déplacer une tâche vers le bas
+          const moveTaskDown = (taskIndex, weekId, taskType) => {
+            const week = weeks.find(w => w.id === weekId);
+            const taskList = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
+            if (taskIndex === week[taskList].length - 1) return;
+            
+            const newWeeks = weeks.map(w => {
+              if (w.id === weekId) {
+                const tasks = [...w[taskList]];
+                const temp = tasks[taskIndex];
+                tasks[taskIndex] = tasks[taskIndex + 1];
+                tasks[taskIndex + 1] = temp;
+                return Object.assign({}, w, { [taskList]: tasks });
+              }
+              return w;
+            });
+            setWeeks(newWeeks);
+            saveToLocalStorage();
+          };
+
+          // Gérer l'upload de fichiers
+          const handleFileUpload = (e) => {
+            const files = Array.from(e.target.files);
+            const fileObjects = files.map(file => ({
+              id: 'file-' + Date.now() + '-' + Math.random(), 
+              name: file.name, 
+              type: file.type, 
+              size: file.size, 
+              url: URL.createObjectURL(file)
+            }));
+            setTaskFiles(prev => prev.concat(fileObjects));
+          };
+// Composant pour afficher une tâche individuelle
+          const TaskItem = ({ task, taskIndex, weekId, taskType, totalTasks }) => (
+            React.createElement('div', { className: "flex items-center space-x-2 p-2 bg-white rounded border hover:shadow-md group transition-all duration-200" },
+              React.createElement('input', { 
+                type: "checkbox", 
+                checked: task.completed, 
+                onChange: (e) => { 
+                  e.stopPropagation(); 
+                  toggleTaskCompleted(task.id, weekId, taskType); 
+                }, 
+                className: "w-4 h-4 text-blue-600"
+              }),
+              React.createElement('span', { 
+                className: `flex-1 cursor-pointer ${task.completed ? 'line-through text-gray-500' : ''}`, 
+                onClick: (e) => { 
+                  e.stopPropagation(); 
+                  setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType })); 
+                }
+              }, task.title),
+              React.createElement('div', { className: "opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1" },
+                React.createElement('div', { className: "flex flex-col" },
+                  React.createElement('button', { 
+                    onClick: (e) => { 
+                      e.stopPropagation(); 
+                      moveTaskUp(taskIndex, weekId, taskType); 
+                    },
+                    disabled: taskIndex === 0,
+                    className: `p-1 rounded text-xs ${taskIndex === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`,
+                    title: "Monter"
+                  }, "▲"),
+                  React.createElement('button', { 
+                    onClick: (e) => { 
+                      e.stopPropagation(); 
+                      moveTaskDown(taskIndex, weekId, taskType); 
+                    },
+                    disabled: taskIndex === totalTasks - 1,
+                    className: `p-1 rounded text-xs ${taskIndex === totalTasks - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`,
+                    title: "Descendre"
+                  }, "▼")
+                ),
+                React.createElement('button', { 
+                  onClick: (e) => { 
+                    e.stopPropagation(); 
+                    openTaskModal(task, weekId, taskType); 
+                  }, 
+                  className: "p-1 rounded hover:bg-gray-100", 
+                  title: "Modifier"
+                }, React.createElement(Edit, { className: "w-4 h-4" })),
+                React.createElement('button', { 
+                  onClick: (e) => { 
+                    e.stopPropagation(); 
+                    duplicateTask(task, weekId, taskType); 
+                  }, 
+                  className: "p-1 rounded hover:bg-blue-100 text-blue-600",
+                  title: "Dupliquer"
+                }, React.createElement(Copy, { className: "w-4 h-4" })),
+                React.createElement('button', { 
+                  onClick: (e) => { 
+                    e.stopPropagation(); 
+                    deleteTask(task.id, weekId, taskType); 
+                  }, 
+                  className: "p-1 rounded hover:bg-red-100 text-red-600",
+                  title: "Supprimer"
+                }, React.createElement(Trash2, { className: "w-4 h-4" }))
+              )
+            )
+          );
+
+          // Début du rendu principal de l'application
+          return React.createElement('div', { className: "min-h-screen bg-gray-50" },
+            
+            // === HEADER PRINCIPAL ===
+React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-0 z-30" },
+  React.createElement('div', { className: "max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4" },
+    React.createElement('div', { className: "flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0" },
+      
+      // Titre principal - toujours en haut
+      React.createElement('div', { className: "flex items-center justify-center sm:justify-start space-x-2" },
+        React.createElement('img', { 
+          src: "https://static.wixstatic.com/shapes/2a5453_041ba1a3aac54cabbc98b2a8903db0b9.svg",
+          alt: "Planning",
+          className: "w-6 h-6 sm:w-8 sm:h-8",
+        }),
+        React.createElement('h1', { 
+          className: "text-lg sm:text-xl font-bold text-white",
+          style: { 
+            fontFamily: 'Andale Mono, monospace',
+            letterSpacing: '5px'
+          }
+        }, "PLANNING PROMO")
+      ),
+      
+      // Zone de création/édition de projet
+      !projectCode ? (
+        // Mode création de projet
+        React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3" },
+          React.createElement('input', {
+            type: "text",
+            value: projectName,
+            onChange: (e) => setProjectName(e.target.value),
+            placeholder: "Nom du projet",
+            className: "w-full sm:w-auto px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm",
+            style: { fontFamily: 'Andale Mono, monospace' }
+          }),
+          React.createElement('input', {
+            type: "date",
+            value: releaseDate,
+            onChange: (e) => setReleaseDate(e.target.value),
+            className: "w-full sm:w-auto px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm",
+            style: { fontFamily: 'Andale Mono, monospace' }
+          }),
+          React.createElement('button', {
+            onClick: createNewProject,
+            disabled: !projectName || !releaseDate,
+            className: "w-full sm:w-auto px-4 py-2 bg-black text-white border border-white rounded-lg hover:bg-gray-900 disabled:bg-black-100 font-medium text-sm",
+            style: {
+              fontFamily: 'Andale Mono, monospace',
+              fontSize: '12px',
+              fontWeight: '500',
+              letterSpacing: '2px',
+              textTransform: 'uppercase'
+            }
+          }, "+ Créer")
+        )
+      ) : (
+        // Mode projet existant
+        React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4" },
+          // Info projet
+          !showProjectEdit ? (
+            React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3" },
+              React.createElement('button', {
+                onClick: () => setShowProjectEdit(true),
+                className: "px-3 py-2 bg-black text-white rounded-lg font-medium shadow-lg hover:bg-gray-900 transition-colors text-sm",
+                style: {
+                  backgroundColor: 'black',
+                  color: 'white',
+                  border: '1px solid white',
+                  fontFamily: 'Andale Mono, monospace'
+                }
+              }, projectName),
+              React.createElement('button', {
+                onClick: () => setShowProjectEdit(true),
+                className: "px-3 py-2 bg-black text-white rounded-lg shadow-lg hover:bg-gray-900 transition-colors text-sm",
+                style: {
+                  backgroundColor: 'black',
+                  color: 'white',
+                  border: '1px solid white',
+                  fontFamily: 'Andale Mono, monospace'
+                }
+              }, "📅 " + new Date(releaseDate).toLocaleDateString('fr-FR'))
+            )
+          ) : (
+            // Mode édition du projet
+            React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3" },
+              React.createElement('input', {
+                type: "text",
+                value: projectName,
+                onChange: (e) => setProjectName(e.target.value),
+                className: "px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm"
+              }),
+              React.createElement('input', {
+                type: "date",
+                value: releaseDate,
+                onChange: (e) => updateProjectDate(e.target.value),
+                className: "px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm"
+              }),
+              React.createElement('div', { className: "flex space-x-2" },
+                React.createElement('button', {
+                  onClick: () => setShowProjectEdit(false),
+                  className: "px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                }, "✓"),
+                React.createElement('button', {
+                  onClick: () => setShowProjectEdit(false),
+                  className: "px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
+                }, "✕")
+              )
+            )
+          ),
+          
+          // Boutons d'action
+         React.createElement('div', { className: "flex flex-wrap gap-8 sm:gap-2 justify-center sm:justify-end" },
+            React.createElement('button', {
+              onClick: () => window.open('https://chatgpt.com/g/g-68091c28e7108191bfef40e271e728ac-marty-ton-manager-qui-ne-dort-jamais', '_blank'),
+              className: "flex items-center justify-center px-3 py-2 bg-black text-white border border-white rounded-xl hover:bg-gray-900 transition-colors",
+              style: {
+                fontFamily: 'Andale Mono, monospace',
+                fontSize: '10px',
+                fontWeight: '500',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+              }
+            },
+              React.createElement('svg', {
+                className: "w-3 h-3 mr-1",
+                fill: "none",
+                stroke: "white",
+                viewBox: "0 0 24 24",
+                style: { strokeWidth: 2 }
+              },
+                React.createElement('path', {
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round",
+                  d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                })
+              ),
+              React.createElement('span', { className: "hidden sm:inline" }, 'PARLER À MARTY')
+            ),
+            React.createElement('img', {
+              src: "https://static.wixstatic.com/media/2a5453_ec59e6e1b9db467890393da44d7ef57d~mv2.png",
+              alt: "Importer",
+              onClick: () => setShowImportModal(true),
+              className: "h-6 w-6 cursor-pointer hover:opacity-75 transition-opacity"
+            }),
+            React.createElement('img', {
+              src: "https://static.wixstatic.com/media/2a5453_222c757e9387488aba80defdff87d6e9~mv2.png",
+              alt: "Télécharger",
+              onClick: exportData,
+              className: "h-6 w-6 cursor-pointer hover:opacity-75 transition-opacity"
+            }),
+            React.createElement('img', {
+              src: "https://static.wixstatic.com/media/2a5453_fb103c66d0f94b5fb48f7cd8af67cefb~mv2.png",
+              alt: "Nouveau",
+              onClick: resetProject,
+              className: "h-6 w-6 cursor-pointer hover:opacity-75 transition-opacity"
+            })
+          )
+        )
+      )
+    )
+  )
+),
+                  
+                 
+            // === CONTENU PRINCIPAL ===
+            projectCode && weeks.length > 0 && React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-6 space-y-6" },
+              // Bouton d'ajout de semaine
+              React.createElement('div', { className: "text-center" },
+                React.createElement('button', {
+                  onClick: () => setShowWeekTemplateModal(true),
+                  className: "px-6 py-3 bg-white text-black border border-black rounded-lg hover:bg-gray-50 font-medium",
+style: {
+  fontFamily: 'Andale Mono, monospace',
+  fontSize: '14px',
+  fontWeight: '500',
+  letterSpacing: '3px',
+  textTransform: 'uppercase'
+}
+}, "➕ Ajouter une semaine personnalisée")
+              ),
+              weeks.map((week) =>
+                React.createElement('div', { key: week.id, className: "bg-white rounded-lg shadow-sm border overflow-hidden" },
+                  // En-tête de semaine
+                  React.createElement('div', { 
+                    className: `px-6 py-3 shadow-lg relative group ${
+                      week.isBilanPromo ? 'bg-gradient-to-r from-green-600 to-teal-600 text-white' :
+                      week.isReleaseDay ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' :
+                      week.isReleaseWeek ? 'bg-red-500 text-white' : 
+                    week.isCustomWeek ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : 'bg-yellow-400 text-black'
+                    }`, 
+                    style: !week.isReleaseWeek && !week.isReleaseDay && !week.isBilanPromo && !week.isCustomWeek ? {backgroundColor: '#fffc00'} : {}
+                  },
+                    // Boutons de gestion pour les semaines personnalisées
+                    week.isCustomWeek && React.createElement('div', { className: "absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1" },
+  React.createElement('button', {
+    onClick: () => {
+      const newOffset = prompt('Nouvelle position (ex: -4, -2, 1, 5):', week.weekOffset);
+      if (newOffset !== null) {
+        moveWeek(week.id, parseInt(newOffset));
+      }
+    },
+    className: "p-1 rounded hover:bg-white-100 bg-white bg-opacity-0",
+    title: "Déplacer"
+  }, React.createElement(Edit, { className: "w-4 h-4" })),
+  React.createElement('button', {
+    onClick: () => removeCustomWeek(week.id),
+    className: "p-1 rounded hover:bg-white-100 text-white-600 bg-white bg-opacity-0",
+    title: "Supprimer"
+  }, React.createElement(Trash2, { className: "w-4 h-4" }))
+),
+                    React.createElement('h2', { 
+                      className: "font-bold pr-16",
+                      style: {
+                        fontFamily: 'Andale Mono, monospace',
+                        letterSpacing: '2px'
+                      }
+                    },
+                      week.isBilanPromo ? 
+                        `📊 FAIRE LE BILAN DE TA PROMO - ${week.startDate} 📊` :
+                        week.isReleaseDay ? 
+                        `🎊 LE JOUR DE TA SORTIE - ${week.startDate} 🎊` :
+                        week.isCustomWeek ?
+                        `${week.templateName} - SEMAINE ${week.number} DU ${week.startDate} AU ${week.endDate}` :
+                        `SEMAINE ${week.number} DU ${week.startDate} AU ${week.endDate}${week.isReleaseWeek ? ' - 🎉 SORTIE ! 🎉' : ''}`
+                    )
+                  ),
+                               
+                  // Contenu de la semaine
+                  React.createElement('div', { className: "p-6" },
+                    week.isBilanPromo ? (
+                      // Section bilan spéciale
+                      React.createElement('div', null,
+                        React.createElement('div', { className: "p-4 border-2 border-dashed rounded-lg min-h-[200px] border-gray-300 hover:border-green-400" },
+                          React.createElement('div', { className: "flex items-center justify-between mb-4" },
+                            React.createElement('h3', { className: "font-semibold text-gray-900" }, "📊 Checklist de bilan"),
+                            React.createElement('button', { 
+                              onClick: () => openTaskModal(null, week.id, 'todo'), 
+                              className: "p-1 rounded hover:bg-gray-100" 
+                            }, React.createElement(Plus, { className: "w-4 h-4" }))
+                          ),
+                          React.createElement('div', { className: "space-y-2" },
+                            week.todoTasks.map((task, index) =>
+                              React.createElement(TaskItem, { 
+                                key: task.id, 
+                                task: task, 
+                                taskIndex: index, 
+                                weekId: week.id, 
+                                taskType: "todo", 
+                                totalTasks: week.todoTasks.length
+                              })
+                            ),
+                            week.todoTasks.length === 0 && React.createElement('div', { 
+                              className: "text-center text-gray-400 py-8" 
+                            }, "Aucune tâche")
+                          )
+                        ),
+                        // Bouton Replay pour le bilan
+                        React.createElement('div', { className: "mt-4 flex justify-start" },
+                          React.createElement('button', {
+                            onClick: () => {
+                              if (week.youtubeReplayUrl) {
+                                window.open(week.youtubeReplayUrl, '_blank');
+                              } else {
+                                alert('Aucun lien configuré pour cette semaine');
+                              }
+                            },
+                            onContextMenu: (e) => {
+                              e.preventDefault();
+                              const newUrl = prompt('Entrez le lien YouTube pour cette semaine:', week.youtubeReplayUrl || '');
+                              if (newUrl !== null) {
+                                // Mettre à jour le lien pour cette semaine
+                                const updatedWeeks = weeks.map(w => 
+                                  w.id === week.id ? {...w, youtubeReplayUrl: newUrl} : w
+                                );
+                                setWeeks(updatedWeeks);
+                              }
+                            },
+                            className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+                            style: {
+                              fontFamily: 'Andale Mono, monospace',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              letterSpacing: '5px',
+                              textTransform: 'uppercase'
+                            },
+                            title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
+                          },
+                            React.createElement('span', { 
+                              style: { marginRight: '8px', fontSize: '16px' }
+                            }, '▶'),
+                            React.createElement('span', null, 'LE REPLAY DU COURS')
+                          )
+                        )
+                      )
+                    ) : (
+                      // Sections normales (todo + fan)
+                      React.createElement('div', null,
+                        React.createElement('div', { className: "grid lg:grid-cols-2 gap-6" },
+                          // Section Todo
+                          React.createElement('div', { className: "p-4 border-2 border-dashed rounded-lg min-h-[200px] border-gray-300 hover:border-blue-400" },
+                            React.createElement('div', { className: "flex items-center justify-between mb-4" },
+                              React.createElement('h3', { 
+                                className: "font-semibold text-gray-900",
+                                style: { fontFamily: 'Poppins, sans-serif', fontWeight: '600' }
+                              },
+                                week.isReleaseDay ? '⏰ Planning du jour J' : '🚀 To do list'
+                              ),
+                              React.createElement('button', { 
+                                onClick: () => openTaskModal(null, week.id, 'todo'), 
+                                className: "p-1 rounded hover:bg-gray-100" 
+                              }, React.createElement(Plus, { className: "w-4 h-4" }))
+                            ),
+                            React.createElement('div', { className: "space-y-2" },
+                              week.todoTasks.map((task, index) =>
+                                React.createElement(TaskItem, { 
+                                  key: task.id, 
+                                  task: task, 
+                                  taskIndex: index, 
+                                  weekId: week.id, 
+                                  taskType: "todo", 
+                                  totalTasks: week.todoTasks.length
+                                })
+                              ),
+                              week.todoTasks.length === 0 && React.createElement('div', { 
+                                className: "text-center text-gray-400 py-8" 
+                              }, "Aucune tâche")
+                            )
+                          ),
+                          
+                          // Section Fan
+                          React.createElement('div', { className: "p-4 border-2 border-dashed rounded-lg min-h-[200px] border-gray-300 hover:border-purple-400" },
+                            React.createElement('div', { className: "flex items-center justify-between mb-4" },
+                              React.createElement('h3', { 
+                                className: "font-semibold text-gray-900",
+                                style: { fontFamily: 'Poppins, sans-serif', fontWeight: '600' }
+                              },
+                                week.isReleaseDay ? '🎉 Communication du jour J' : '🤘 Le voyage du fan'
+                              ),
+                              React.createElement('button', { 
+                                onClick: () => openTaskModal(null, week.id, 'fan'), 
+                                className: "p-1 rounded hover:bg-gray-100" 
+                              }, React.createElement(Plus, { className: "w-4 h-4" }))
+                            ),
+                            React.createElement('div', { className: "space-y-2" },
+                              week.fanTasks.map((task, index) =>
+                                React.createElement(TaskItem, { 
+                                  key: task.id, 
+                                  task: task, 
+                                  taskIndex: index, 
+                                  weekId: week.id, 
+                                  taskType: "fan", 
+                                  totalTasks: week.fanTasks.length
+                                })
+                              ),
+                              week.fanTasks.length === 0 && React.createElement('div', { 
+                                className: "text-center text-gray-400 py-8" 
+                              }, "Aucune tâche")
+                            )
+                          )
+                        ),
+                        // Bouton Replay pour les semaines normales
+                        React.createElement('div', { className: "mt-4 flex justify-start" },
+                          React.createElement('button', {
+                            onClick: () => {
+                              if (week.youtubeReplayUrl) {
+                                window.open(week.youtubeReplayUrl, '_blank');
+                              } else {
+                                alert('Aucun lien configuré pour cette semaine');
+                              }
+                            },
+                            onContextMenu: (e) => {
+                              e.preventDefault();
+                              const newUrl = prompt('Entrez le lien YouTube pour cette semaine:', week.youtubeReplayUrl || '');
+                              if (newUrl !== null) {
+                                // Mettre à jour le lien pour cette semaine
+                                const updatedWeeks = weeks.map(w => 
+                                  w.id === week.id ? {...w, youtubeReplayUrl: newUrl} : w
+                                );
+                                setWeeks(updatedWeeks);
+                              }
+                            },
+                            className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+                            style: {
+                              fontFamily: 'Andale Mono, monospace',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              letterSpacing: '5px',
+                              textTransform: 'uppercase'
+                            },
+                            title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
+                          },
+                            React.createElement('span', { 
+                              style: { marginRight: '8px', fontSize: '16px' }
+                            }, '▶'),
+                            React.createElement('span', null, 'LE REPLAY DU COURS')
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+
+            // === ÉCRAN DE BIENVENUE ===
+!projectCode && React.createElement('div', { className: "min-h-screen bg-black flex flex-col items-center text-center px-4", style: { paddingTop: '80px', paddingBottom: '80px' } },
+  React.createElement('button', {
+  onClick: () => setShowVideoModal(true),
+  className: "mb-6 px-6 py-3 bg-black text-white border border-white rounded-lg hover:bg-gray-900 font-medium",
+  style: {
+    fontFamily: 'Andale Mono, monospace',
+    fontSize: '16px',
+    fontWeight: '500',
+    letterSpacing: '3px',
+    textTransform: 'uppercase'
+  }
+}, "▶ Voir le tuto"),
+React.createElement('h2', { 
+  className: "text-white mb-8 text-3xl font-bold",
+  style: { 
+    fontFamily: 'Andale Mono, monospace',
+    letterSpacing: '3px'
+  }
+  }, "BIENVENUE DANS TON RÉTRO-PLANNING PROMO"),
+  React.createElement('div', { 
+  className: "mb-8 text-center",
+  style: { 
+    transform: 'rotate(-2deg)',
+    lineHeight: '1.2'
+  }
+},
+  React.createElement('p', { 
+    className: "text-black px-4 py-2 rounded-lg inline-block",
+    style: { 
+      fontFamily: 'Andale Mono, monospace',
+      fontSize: '16px',
+      fontWeight: '500',
+      backgroundColor: '#fff500',
+      margin: '0 0 4px 0'
+    }
+  }, "Organise ta promotion musicale étape par étape."),
+  React.createElement('br'),
+  React.createElement('p', { 
+    className: "text-black px-4 py-2 rounded-lg inline-block",
+    style: { 
+      fontFamily: 'Andale Mono, monospace',
+      fontSize: '16px',
+      fontWeight: '500',
+      backgroundColor: '#fff500',
+      margin: '0'
+    }
+  }, "Crée un nouveau projet en utilisant les champs ci-dessus.")
+),
+  React.createElement('img', {
+    src: "https://static.wixstatic.com/media/2a5453_c67ebe3814014de589855dc4d7daf906~mv2.png",
+    alt: "Rock hands",
+    className: "max-w-md w-full h-auto"
+  })
+),
+
+            // === MODAL TÂCHE ===
+            showTaskModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4" },
+  React.createElement('div', { className: "bg-white rounded-lg w-full max-w-sm sm:max-w-4xl max-h-[90vh] sm:max-h-[75vh] flex flex-col" },
+  React.createElement('div', { className: "p-4 border-b flex-shrink-0" },
+    React.createElement('div', { className: "flex items-center justify-between" },
+      React.createElement('h2', { className: "text-lg font-bold" }, editingTask ? 'Modifier la tâche' : 'Nouvelle tâche'),
+                    React.createElement('button', { 
+                      onClick: closeTaskModal, 
+                      className: "p-1 rounded hover:bg-gray-100" 
+                    }, React.createElement(X, { className: "w-5 h-5" }))
+                  )
+                ),
+                React.createElement('div', { className: "flex-1 overflow-y-auto p-4" },
+                  React.createElement('div', { className: "space-y-3" },
+                    React.createElement('div', null,
+                      React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Titre *"),
+                      React.createElement('input', { 
+                        type: "text", 
+                        value: taskTitle, 
+                        onChange: (e) => setTaskTitle(e.target.value), 
+                        className: "w-full px-3 py-2 border rounded text-sm"
+                      })
+                    ),
+                    React.createElement('div', null,
+                      React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Description"),
+                      React.createElement('textarea', { 
+                        value: taskDescription, 
+                        onChange: (e) => setTaskDescription(e.target.value), 
+                        rows: 3, 
+                        className: "w-full px-3 py-2 border rounded text-sm"
+                      })
+                    ),
+                    React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Lien YouTube"),
+                        React.createElement('input', { 
+                          type: "text", 
+                          value: taskYouTube, 
+                          onChange: (e) => setTaskYouTube(e.target.value), 
+                          placeholder: "https://youtube.com/watch?v=...",
+                          className: "w-full px-3 py-2 border rounded text-sm"
+                        })
+                      ),
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Titre vidéo"),
+                        React.createElement('input', { 
+                          type: "text", 
+                          value: taskYouTubeTitle, 
+                          onChange: (e) => setTaskYouTubeTitle(e.target.value), 
+                          placeholder: "Ex: Mon nouveau clip",
+                          className: "w-full px-3 py-2 border rounded text-sm"
+                        })
+                      )
+                    ),
+                    React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Lien Instagram"),
+                        React.createElement('input', { 
+                          type: "text", 
+                          value: taskInstagram, 
+                          onChange: (e) => setTaskInstagram(e.target.value), 
+                          placeholder: "https://instagram.com/p/...",
+                          className: "w-full px-3 py-2 border rounded text-sm"
+                        })
+                      ),
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Titre post"),
+                        React.createElement('input', { 
+                          type: "text", 
+                          value: taskInstagramTitle, 
+                          onChange: (e) => setTaskInstagramTitle(e.target.value), 
+                          placeholder: "Ex: Behind the scenes",
+                          className: "w-full px-3 py-2 border rounded text-sm"
+                        })
+                      )
+                    ),
+                    React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Lien externe"),
+                        React.createElement('input', { 
+                          type: "text", 
+                          value: taskExternalUrl, 
+                          onChange: (e) => setTaskExternalUrl(e.target.value), 
+                          placeholder: "https://...",
+                          className: "w-full px-3 py-2 border rounded text-sm"
+                        })
+                      ),
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Texte bouton"),
+                        React.createElement('input', { 
+                          type: "text", 
+                          value: taskExternalButtonText, 
+                          onChange: (e) => setTaskExternalButtonText(e.target.value), 
+                          placeholder: "Ex: Voir le site",
+                          className: "w-full px-3 py-2 border rounded text-sm"
+                        })
+                      )
+                    ),
+                    React.createElement('div', null,
+                      React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Fichiers"),
+                      React.createElement('button', { 
+                        onClick: () => fileInputRef.current && fileInputRef.current.click(), 
+                        className: "px-4 py-2 bg-gray-100 rounded text-sm hover:bg-gray-200"
+                      }, "Ajouter fichiers"),
+                      React.createElement('input', { 
+                        type: "file", 
+                        multiple: true, 
+                        ref: fileInputRef, 
+                        onChange: handleFileUpload, 
+                        className: "hidden"
+                      }),
+                      taskFiles.length > 0 && React.createElement('div', { className: "mt-2 space-y-1 max-h-16 overflow-y-auto" },
+                        taskFiles.map(f =>
+                          React.createElement('div', { key: f.id, className: "flex justify-between p-1 bg-gray-50 rounded text-xs" },
+                            React.createElement('span', { className: "truncate" }, f.name),
+                            React.createElement('span', { className: "text-gray-500" }, Math.round(f.size / 1024) + "KB")
+                          )
+                        )
+                      )
+                    )
+                  )
+                ),
+                React.createElement('div', { className: "p-4 border-t flex justify-end" },
+                  React.createElement('button', { 
+                    onClick: saveTask, 
+                    className: "bg-blue-600 text-white px-6 py-2 rounded-lg text-sm" 
+                  }, "Sauvegarder")
+                )
+              )
+            ),
+
+            // === MODAL DÉTAIL TÂCHE ===
+            showTaskDetail && React.createElement('div', { 
+              className: "fixed inset-0 bg-black bg-opacity-50 z-40", 
+              onClick: () => setShowTaskDetail(null) 
+            },
+              React.createElement('div', { 
+                className: "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg w-full max-w-lg shadow-xl max-h-[80vh] flex flex-col", 
+                onClick: e => e.stopPropagation() 
+              },
+                React.createElement('div', { className: "p-6 border-b relative" },
+                  React.createElement('h2', { className: "text-xl font-bold pr-8" }, showTaskDetail.title),
+                  React.createElement('button', { 
+                    onClick: () => setShowTaskDetail(null), 
+                    className: "absolute top-3 right-3 p-1 hover:bg-gray-100 rounded-full"
+                  }, React.createElement(X, { className: "w-5 h-5" }))
+                ),
+                React.createElement('div', { className: "p-6 space-y-4 flex-1 overflow-y-auto" },
+                  showTaskDetail.description && React.createElement('div', null,
+                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "Description"),
+                    React.createElement('p', { 
+                      className: "text-gray-700 bg-gray-50 p-3 rounded-lg",
+                      style: { whiteSpace: 'pre-wrap' }
+                    }, showTaskDetail.description)
+                  ),
+                  showTaskDetail.youtubeUrl && React.createElement('div', null,
+                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "🎬 YouTube"),
+                    showTaskDetail.youtubeTitle && React.createElement('h4', { className: "font-medium text-gray-900 mb-2" }, showTaskDetail.youtubeTitle),
+                    React.createElement('a', { 
+                      href: showTaskDetail.youtubeUrl, 
+                      target: "_blank", 
+                      rel: "noopener noreferrer",
+                      className: "text-blue-600 hover:text-blue-800 underline break-all"
+                    }, showTaskDetail.youtubeUrl)
+                  ),
+                  showTaskDetail.instagramUrl && React.createElement('div', null,
+                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "📸 Instagram"),
+                    showTaskDetail.instagramTitle && React.createElement('h4', { className: "font-medium text-gray-900 mb-2" }, showTaskDetail.instagramTitle),
+                    React.createElement('a', { 
+                      href: showTaskDetail.instagramUrl, 
+                      target: "_blank", 
+                      rel: "noopener noreferrer",
+                      className: "text-blue-600 hover:text-blue-800 underline break-all"
+                    }, showTaskDetail.instagramUrl)
+                  ),
+                  showTaskDetail.externalUrl && React.createElement('div', null,
+                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "🔗 Lien externe"),
+                    React.createElement('a', { 
+                      href: showTaskDetail.externalUrl, 
+                      target: "_blank", 
+                      rel: "noopener noreferrer",
+                      className: "inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    }, showTaskDetail.externalButtonText || 'Voir le lien')
+                  ),
+                  showTaskDetail.files && showTaskDetail.files.length > 0 && React.createElement('div', null,
+                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, `📁 Fichiers (${showTaskDetail.files.length})`),
+                    React.createElement('div', { className: "space-y-2" },
+                      showTaskDetail.files.map(file =>
+                        React.createElement('div', { key: file.id, className: "flex justify-between p-2 bg-gray-50 rounded-lg" },
+                          React.createElement('span', { className: "text-sm truncate" }, file.name),
+                          React.createElement('span', { className: "text-xs text-gray-500" }, Math.round(file.size / 1024) + "KB")
+                        )
+                      )
+                    )
+                  )
+                ),
+                React.createElement('div', { className: "p-6 border-t flex justify-end" },
+                  React.createElement('button', {
+                    onClick: () => {
+                      openTaskModal(showTaskDetail, showTaskDetail.weekId, showTaskDetail.taskType);
+                      setShowTaskDetail(null);
+                    },
+                    className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                  },
+                    React.createElement(Edit, { className: "w-4 h-4" }),
+                    React.createElement('span', null, "Modifier")
+                  )
+                )
+              )
+            ),
+
+            // === MODAL IMPORT ===
+           showImportModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4" },
+  React.createElement('div', { className: "bg-white rounded-lg w-full max-w-sm sm:max-w-md p-4 sm:p-6" },
+  React.createElement('div', { className: "flex items-center justify-between mb-4" },
+    React.createElement('h2', { className: "text-lg font-bold" }, "Importer un planning"),
+    React.createElement('button', { 
+      onClick: () => setShowImportModal(false), 
+      className: "p-1 rounded hover:bg-gray-100" 
+    }, React.createElement(X, { className: "w-5 h-5" }))
+  ),
+                React.createElement('div', { className: "space-y-4" },
+                  React.createElement('p', { className: "text-gray-600 text-sm" }, "Sélectionnez un fichier JSON de planning à importer :"),
+                  React.createElement('input', { 
+                    type: "file", 
+                    accept: ".json", 
+                    onChange: importData, 
+                    className: "w-full px-3 py-2 border rounded"
+                  }),
+                  React.createElement('button', { 
+                    onClick: () => setShowImportModal(false), 
+                    className: "w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                  }, "Annuler")
+                )
+              )
+            ),
+// === MODAL VIDÉO TUTORIEL ===
+showVideoModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4" },
+  React.createElement('div', { className: "relative w-full max-w-4xl" },
+    React.createElement('button', {
+      onClick: () => setShowVideoModal(false),
+      className: "absolute -top-12 right-0 text-white text-2xl hover:text-gray-300 z-10"
+    }, "✕"),
+    React.createElement('video', {
+      controls: true,
+      autoPlay: true,
+      className: "w-full h-auto rounded-lg border-2 border-white shadow-lg",
+      style: { maxHeight: '80vh' }
+    },
+      React.createElement('source', {
+        src: "https://video.wixstatic.com/video/2a5453_5b636f13238b4cffbe2e6a5afe2f5a72/1080p/mp4/file.mp4",
+        type: "video/mp4"
+      }),
+      "Votre navigateur ne supporte pas la lecture de vidéos."
+    )
+  )
+),
+            // === MODAL TEMPLATE SEMAINE ===
+            showWeekTemplateModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4" },
+  React.createElement('div', { className: "bg-white rounded-lg w-full max-w-sm sm:max-w-2xl p-4 sm:p-6 max-h-[90vh] sm:max-h-[80vh] overflow-y-auto" },
+  React.createElement('div', { className: "flex items-center justify-between mb-4" },
+    React.createElement('h2', { className: "text-lg font-bold" }, "Ajouter une semaine personnalisée"),
+    React.createElement('button', { 
+      onClick: () => setShowWeekTemplateModal(false), 
+      className: "p-1 rounded hover:bg-gray-100" 
+    }, React.createElement(X, { className: "w-5 h-5" }))
+  ),
+                React.createElement('div', { className: "space-y-4" },
+                  getWeekTemplates().map(template =>
+                    React.createElement('div', { 
+                      key: template.id,
+                      className: "border rounded-lg p-4 hover:bg-gray-50"
+                    },
+                      React.createElement('h3', { className: "font-semibold mb-2" }, template.name),
+                      React.createElement('p', { className: "text-sm text-gray-600 mb-3" }, template.description),
+                      React.createElement('div', { className: "mb-3" },
+                        React.createElement('p', { className: "text-xs font-medium text-gray-500 mb-1" }, "Tâches TODO:"),
+                        React.createElement('ul', { className: "text-xs text-gray-600 ml-4" },
+                          template.todoTasks.slice(0, 2).map((task, i) =>
+                            React.createElement('li', { key: i, className: "mb-1" }, "• " + task)
+                          ),
+                          template.todoTasks.length > 2 && React.createElement('li', null, `• ... et ${template.todoTasks.length - 2} autres`)
+                        )
+                      ),
+                      template.isCustomTitle ? 
+  React.createElement('div', { className: "space-y-3" },
+    React.createElement('input', {
+      type: "text",
+      value: customWeekTitle,
+      onChange: (e) => setCustomWeekTitle(e.target.value),
+      placeholder: "Titre de la semaine personnalisée",
+      className: "w-full px-3 py-2 border rounded text-sm",
+      style: { fontFamily: 'Andale Mono, monospace' }
+    }),
+    React.createElement('button', {
+      onClick: () => {
+        if (!customWeekTitle.trim()) {
+          alert('Veuillez saisir un titre pour la semaine');
+          return;
+        }
+        const position = prompt('Position de la semaine (ex: -4 pour 4 semaines avant la sortie, 5 pour 5 semaines après):', '4');
+        if (position !== null) {
+          addCustomWeek(template.id, parseInt(position), customWeekTitle.trim());
+        }
+      },
+      className: "px-4 py-2 text-black rounded hover:opacity-80 w-full",
+style: { backgroundColor: '#fff500' }
+    }, "Ajouter cette semaine")
+  ) :
+  React.createElement('button', {
+    onClick: () => {
+      const position = prompt('Position de la semaine (ex: -4 pour 4 semaines avant la sortie, 5 pour 5 semaines après):', '4');
+      if (position !== null) {
+        addCustomWeek(template.id, parseInt(position));
+      }
+    },
+className: "px-4 py-2 text-black rounded hover:opacity-80",
+style: { backgroundColor: '#fff500' }
+  }, "Ajouter cette semaine")
+                    )
+                  )
+                )
+              )
+            )
+          );
+        };
+
+        // Rendu de l'application
+        ReactDOM.render(React.createElement(MusicPromoPlanner), document.getElementById('root'));
+    </script>
+</body>
+</html>
