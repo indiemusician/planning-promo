@@ -1484,7 +1484,8 @@ const updateProjectDate = (newDate) => {
       navigator.vibrate(50); // Vibration courte de 50ms
     }
   }
-  toggleTaskCompleted(task.id, weekId, taskType); 
+  setOpenMobileMenu(null);
+toggleTaskCompleted(task.id, weekId, taskType);
 }, 
                className: "custom-checkbox"
               }),
@@ -1492,10 +1493,12 @@ const updateProjectDate = (newDate) => {
               className: `flex-1 cursor-pointer ${task.completed ? 'task-completed text-gray-500' : 'text-gray-900'}`,
                 onClick: (e) => { 
                   e.stopPropagation(); 
+                  setOpenMobileMenu(null);
                   setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType })); 
                 },
                 onTouchEnd: (e) => {
                   e.stopPropagation();
+                  setOpenMobileMenu(null);
                   setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType }));
                 }
          }, task.title),
@@ -2507,7 +2510,7 @@ style: { backgroundColor: '#fffc00' }
                     )
                   )
                 ),
-             React.createElement('div', { className: "p-6 border-t flex justify-end space-x-2" },
+             React.createElement('div', { className: "p-6 border-t flex justify-end" },
                   React.createElement('button', {
                     onClick: () => {
                       openTaskModal(showTaskDetail, showTaskDetail.weekId, showTaskDetail.taskType);
@@ -2518,28 +2521,6 @@ style: { backgroundColor: '#000000', color: '#fffc00' }
                   },
                     React.createElement(Edit, { className: "w-4 h-4" }),
                     React.createElement('span', null, "Modifier")
-                  ),
-                  React.createElement('button', {
-                    onClick: () => {
-                      duplicateTask(showTaskDetail, showTaskDetail.weekId, showTaskDetail.taskType);
-                      setShowTaskDetail(null);
-                    },
-                    className: "px-4 py-2 rounded-lg hover:opacity-80 flex items-center space-x-2 text-black font-mono",
-                    style: { backgroundColor: '#fffc00' }
-                  },
-                    React.createElement(Copy, { className: "w-4 h-4" }),
-                    React.createElement('span', null, "Dupliquer")
-                  ),
-                  React.createElement('button', {
-                    onClick: () => {
-                      deleteTask(showTaskDetail.id, showTaskDetail.weekId, showTaskDetail.taskType);
-                      setShowTaskDetail(null);
-                    },
-                    className: "px-4 py-2 rounded-lg hover:opacity-80 flex items-center space-x-2 text-black font-mono",
-                    style: { backgroundColor: '#fffc00' }
-                  },
-                    React.createElement(Trash2, { className: "w-4 h-4" }),
-                    React.createElement('span', null, "Supprimer")
                   )
                 )
               )
