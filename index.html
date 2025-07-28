@@ -13,7 +13,150 @@
     <style>
         body { margin: 0; font-family: 'Poppins', sans-serif; }
         .lucide { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 2; }
-    </style>
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-50px) rotate(0deg) scale(0);
+    opacity: 1;
+  }
+  10% {
+    transform: translateY(-30px) rotate(180deg) scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(1080deg) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  z-index: 1000;
+  animation: confetti-fall 3s linear forwards;
+}
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slideOutDown {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+  }
+}
+/* Styles pour le fond étoilé */
+.stars {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #fff;
+  border-radius: 50%;
+  animation: twinkle 3s infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+/* Styles pour la barre de progression */
+.progress-bar-container {
+  background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 100%);
+  border-radius: 20px;
+  height: 8px;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 20px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+ background: linear-gradient(90deg, #ff69b4 0%, #ff1493 50%, #c71585 100%);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes fadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Cases à cocher simples */
+.custom-checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #000000;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.custom-checkbox:checked {
+  background: #000000;
+  border-color: #000000;
+}
+
+.custom-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: #fffc00;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+/* Style simple pour le texte des tâches terminées */
+.task-completed {
+  text-decoration: line-through;
+  transition: all 0.3s ease;
+}
+</style>
 </head>
 <body>
     <div id="root"></div>
@@ -72,6 +215,44 @@
         );
 
         const { useState, useRef, useEffect } = React;
+// Fonction pour créer les étoiles scintillantes
+const createStars = () => {
+  const starsContainer = document.getElementById('stars');
+  if (!starsContainer) return;
+  
+  const numStars = 50;
+  starsContainer.innerHTML = ''; // Vider le conteneur
+  
+  for (let i = 0; i < numStars; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    star.style.left = Math.random() * 100 + '%';
+    star.style.top = Math.random() * 100 + '%';
+    star.style.animationDelay = Math.random() * 3 + 's';
+    starsContainer.appendChild(star);
+  }
+};
+
+// Fonction pour créer l'effet confetti
+const createConfetti = (element) => {
+  const rect = element.getBoundingClientRect();
+  const colors = ['#fffc00', '#ff69b4', '#00ff00', '#ff4500', '#9400d3', '#ff1493', '#ffd700'];
+  
+  for (let i = 0; i < 25; i++) {
+    const confetti = document.createElement('div');
+    confetti.className = 'confetti-piece';
+    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.left = (rect.left + rect.width/2 + (Math.random() - 0.5) * 300) + 'px';
+    confetti.style.top = (rect.top + (Math.random() - 0.5) * 100) + 'px';
+    confetti.style.animationDuration = (Math.random() * 1.5 + 1.5) + 's';
+    confetti.style.width = (Math.random() * 8 + 6) + 'px';
+    confetti.style.height = confetti.style.width;
+    confetti.style.borderRadius = '50%';
+    document.body.appendChild(confetti);
+    
+    setTimeout(() => confetti.remove(), 3000);
+  }
+};
 
         const MusicPromoPlanner = () => {
           // États React complets
@@ -100,6 +281,12 @@
           const [draggedWeek, setDraggedWeek] = useState(null);
 const [customWeekTitle, setCustomWeekTitle] = useState('');
 const [showVideoModal, setShowVideoModal] = useState(false);
+const [autoScrollEnabled, setAutoScrollEnabled] = useState(() => {
+  const saved = localStorage.getItem('autoScrollEnabled');
+  return saved !== null ? JSON.parse(saved) : true;
+});
+const [showFloatingMenu, setShowFloatingMenu] = useState(false);
+const [animatingMessages, setAnimatingMessages] = useState({});
 
           // Templates de semaines prédéfinies
           const getWeekTemplates = () => [
@@ -164,7 +351,45 @@ const [showVideoModal, setShowVideoModal] = useState(false);
           // Références
           const fileImportRef = useRef(null);
           const fileInputRef = useRef(null);
+// Messages d'encouragement aléatoires
+const getRandomEncouragementMessage = (percentage) => {
+  const messages = [
+    "🚀 Keep going!",
+    "💪 Tu gères!",
+    "🔥 On fire!",
+    "⭐ Amazing!",
+    "🎯 Focus!",
+    "💎 Tu brilles!",
+    "🌟 Superbe!",
+    "🎵 Rock it!",
+    "🏆 Champion.ne !",
+    "✨ Magique !",
+    "🎪 Show time!",
+    "🎨 Creative!",
+    "🎉 Faut feter ça !",
+    "🚁 Tu voles !",
+    "⚡ Electrique !"
+  ];
+  
+  if (percentage === 100) {
+    return "🎊 PARFAIT!";
+  } else if (percentage === 0) {
+    return "🌱 Let's start!";
+  }
+  
+  return messages[Math.floor(Math.random() * messages.length)];
+};
 
+// Fonction pour calculer le pourcentage de progression d'une semaine
+const calculateWeekProgress = (week) => {
+  const totalTasks = (week.todoTasks?.length || 0) + (week.fanTasks?.length || 0);
+  if (totalTasks === 0) return 0;
+  
+  const completedTasks = (week.todoTasks?.filter(t => t.completed).length || 0) + 
+                        (week.fanTasks?.filter(t => t.completed).length || 0);
+  
+  return Math.round((completedTasks / totalTasks) * 100);
+};
           // Fonction pour générer un code projet unique
           const generateProjectCode = () => {
             const prefix = 'MUSIC';
@@ -733,10 +958,57 @@ const [showVideoModal, setShowVideoModal] = useState(false);
             }
           }, [releaseDate]);
 
-          // Charger automatiquement au démarrage
+        // Charger automatiquement au démarrage
           useEffect(() => {
             loadFromLocalStorage();
+createStars();
           }, []);
+
+        // Auto-scroll vers la semaine en cours
+          useEffect(() => {
+            if (weeks.length > 0 && autoScrollEnabled && releaseDate) {
+              setTimeout(() => {
+                const today = new Date();
+                const releaseDateObj = new Date(releaseDate);
+                const daysDifference = Math.floor((today - releaseDateObj) / (1000 * 60 * 60 * 24));
+                const weeksDifference = Math.floor(daysDifference / 7);
+                
+                const currentWeek = weeks.find(w => w.weekOffset === weeksDifference);
+                if (currentWeek) {
+                  const element = document.getElementById('week-' + currentWeek.id);
+                  if (element) {
+                    // Scroll personnalisé avec effet d'easing
+const headerHeight = window.innerWidth < 640 ? 200 : 80; // Plus de hauteur sur mobile
+const targetPosition = element.offsetTop - headerHeight;
+const startPosition = window.pageYOffset;
+const distance = targetPosition - startPosition;
+const duration = 2000; // 2 secondes
+let start = null;
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+}
+
+function animateScroll(timestamp) {
+  if (!start) start = timestamp;
+  const progress = timestamp - start;
+  const progressRatio = Math.min(progress / duration, 1);
+  const easedProgress = easeInOutCubic(progressRatio);
+  
+  window.scrollTo(0, startPosition + distance * easedProgress);
+  
+  if (progress < duration) {
+    requestAnimationFrame(animateScroll);
+  }
+}
+
+requestAnimationFrame(animateScroll);
+                  }
+                }
+              }, 1000);
+            }
+          }, [weeks.length, releaseDate, autoScrollEnabled]);
+
 
           // Sauvegarder automatiquement à chaque changement
           useEffect(() => {
@@ -910,50 +1182,49 @@ setCustomWeekTitle('');
           };
 
           // Mettre à jour la date de sortie du projet
-          const updateProjectDate = (newDate) => {
+const updateProjectDate = (newDate) => {
+  // 1) Mets à jour la date
   setReleaseDate(newDate);
+
+  // 2) Si un projet existe, régénère les semaines en conservant personnalisation
   if (newDate && projectCode) {
-    // Sauvegarder l'état actuel des semaines avec leurs modifications
-    const currentWeeksState = weeks.map(week => ({
-      ...week,
-      // Préserver les tâches modifiées
-      todoTasks: week.todoTasks || [],
-      fanTasks: week.fanTasks || [],
-      youtubeReplayUrl: week.youtubeReplayUrl || ''
+    const currentWeeksState = weeks.map(w => ({
+      ...w,
+      todoTasks: w.todoTasks || [],
+      fanTasks: w.fanTasks || [],
+      youtubeReplayUrl: w.youtubeReplayUrl || ''
     }));
-    
-    // Sauvegarder les semaines personnalisées
+
     const customWeeks = weeks
       .filter(w => w.isCustomWeek)
       .map(w => ({
-        weekOffset: w.weekOffset, 
-        templateId: w.templateId, 
+        weekOffset: w.weekOffset,
+        templateId: w.templateId,
         templateName: w.templateName
       }));
-    
-    // Regénérer avec les semaines personnalisées
+
     const newWeeks = generateWeeks(newDate, customWeeks);
-    
-    // Fusionner avec l'état sauvegardé pour garder les modifications
-    const mergedWeeks = newWeeks.map(newWeek => {
-      const existingWeek = currentWeeksState.find(w => 
-        w.weekOffset === newWeek.weekOffset && 
-        (w.templateId === newWeek.templateId || (!w.templateId && !newWeek.templateId))
+
+    const mergedWeeks = newWeeks.map(nw => {
+      const existing = currentWeeksState.find(w =>
+        w.weekOffset === nw.weekOffset &&
+        (w.templateId === nw.templateId || (!w.templateId && !nw.templateId))
       );
-      
-      if (existingWeek) {
-        return {
-          ...newWeek,
-          todoTasks: existingWeek.todoTasks,
-          fanTasks: existingWeek.fanTasks,
-          youtubeReplayUrl: existingWeek.youtubeReplayUrl
-        };
-      }
-      return newWeek;
+      return existing
+        ? {
+            ...nw,
+            todoTasks: existing.todoTasks,
+            fanTasks: existing.fanTasks,
+            youtubeReplayUrl: existing.youtubeReplayUrl
+          }
+        : nw;
     });
-    
+
+    // 3) Mets à jour l’état
     setWeeks(mergedWeeks);
-    setTimeout(() => saveToLocalStorage(), 100);
+
+    // 4) Sauvegarde immédiatement
+    saveToLocalStorage();
   }
 };
 
@@ -1082,18 +1353,20 @@ setCustomWeekTitle('');
 
           // Supprimer une tâche
           const deleteTask = (taskId, weekId, taskType) => {
-            setWeeks(prevWeeks => prevWeeks.map(week => {
-              if (week.id === weekId) {
-                const taskListKey = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
-                const filteredTasks = week[taskListKey].filter(task => task.id !== taskId);
-                return Object.assign({}, week, { [taskListKey]: filteredTasks });
-              }
-              return week;
-            }));
-            saveToLocalStorage();
-            setShowTaskDetail(null);
-          };
-
+    if (confirm('Supprimer cette tâche ?')) {
+      setWeeks(prevWeeks => prevWeeks.map(week => {
+        if (week.id === weekId) {
+          const taskListKey = taskType === 'todo' ? 'todoTasks' : 'fanTasks';
+          const filteredTasks = week[taskListKey].filter(task => task.id !== taskId);
+          return Object.assign({}, week, { [taskListKey]: filteredTasks });
+        }
+        return week;
+      }));
+      saveToLocalStorage();
+      setShowTaskDetail(null);
+    }
+  };
+             
           // Cocher/décocher une tâche
           const toggleTaskCompleted = (taskId, weekId, taskType) => {
             const newWeeks = weeks.map(week => {
@@ -1107,6 +1380,18 @@ setCustomWeekTitle('');
               }
               return week;
             });
+            
+            // Si la tâche est cochée, déclencher l'animation du message
+            const week = weeks.find(w => w.id === weekId);
+            const task = week[taskType === 'todo' ? 'todoTasks' : 'fanTasks'].find(t => t.id === taskId);
+            
+            if (!task.completed) { // Si on vient de cocher la tâche
+              setAnimatingMessages(prev => ({...prev, [weekId]: true}));
+              setTimeout(() => {
+                setAnimatingMessages(prev => ({...prev, [weekId]: false}));
+              }, 2000); // Message visible pendant 2 secondes
+            }
+            
             setWeeks(newWeeks);
             saveToLocalStorage();
           };
@@ -1169,13 +1454,20 @@ setCustomWeekTitle('');
                 type: "checkbox", 
                 checked: task.completed, 
                 onChange: (e) => { 
-                  e.stopPropagation(); 
-                  toggleTaskCompleted(task.id, weekId, taskType); 
-                }, 
-                className: "w-4 h-4 text-blue-600"
+  e.stopPropagation();
+  if (!task.completed) {
+    createConfetti(e.target);
+    // Haptic feedback sur mobile
+    if (navigator.vibrate) {
+      navigator.vibrate(50); // Vibration courte de 50ms
+    }
+  }
+  toggleTaskCompleted(task.id, weekId, taskType); 
+}, 
+               className: "custom-checkbox"
               }),
               React.createElement('span', { 
-                className: `flex-1 cursor-pointer ${task.completed ? 'line-through text-gray-500' : ''}`, 
+              className: `flex-1 cursor-pointer ${task.completed ? 'task-completed text-gray-500' : 'text-gray-900'}`,
                 onClick: (e) => { 
                   e.stopPropagation(); 
                   setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType })); 
@@ -1231,8 +1523,17 @@ setCustomWeekTitle('');
           );
 
           // Début du rendu principal de l'application
-          return React.createElement('div', { className: "min-h-screen bg-gray-50" },
-            
+         return React.createElement('div', { 
+  className: "min-h-screen", 
+  style: { 
+    background: 'linear-gradient(135deg, #0a0a0a 0%, #1a0a1a 50%, #0a1a1a 100%)',
+    minHeight: '100vh'
+  }
+},
+
+    // Conteneur d'étoiles
+React.createElement('div', { id: "stars", className: "stars" }),
+        
             // === HEADER PRINCIPAL ===
 React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-0 z-30" },
   React.createElement('div', { className: "max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4" },
@@ -1245,38 +1546,49 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
           alt: "Planning",
           className: "w-6 h-6 sm:w-8 sm:h-8",
         }),
-        React.createElement('h1', { 
-          className: "text-lg sm:text-xl font-bold text-white",
-          style: { 
-            fontFamily: 'Andale Mono, monospace',
-            letterSpacing: '5px'
-          }
-        }, "PLANNING PROMO")
+        React.createElement('div', { className: "flex items-center space-x-3" },
+      
+          React.createElement('h1', { 
+            className: "text-lg sm:text-xl font-bold text-white",
+            style: { 
+              fontFamily: 'Andale Mono, monospace',
+              letterSpacing: '5px'
+            }
+          }, "PLANNING PROMO")
+        )
       ),
       
       // Zone de création/édition de projet
       !projectCode ? (
         // Mode création de projet
-        React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3" },
+        React.createElement('div', { 
+          className: "flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3",
+          style: window.innerWidth < 640 ? { marginBottom: '15px' } : {}
+        },
           React.createElement('input', {
             type: "text",
             value: projectName,
             onChange: (e) => setProjectName(e.target.value),
             placeholder: "Nom du projet",
-            className: "w-full sm:w-auto px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm",
+            className: "w-full sm:w-auto px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm bg-black text-white placeholder-white",
             style: { fontFamily: 'Andale Mono, monospace' }
           }),
-          React.createElement('input', {
+         React.createElement('input', {
             type: "date",
             value: releaseDate,
-            onChange: (e) => setReleaseDate(e.target.value),
-            className: "w-full sm:w-auto px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm",
+            onChange: (e) => updateProjectDate(e.target.value),
+            onClick: (e) => {
+              e.target.showPicker && e.target.showPicker();
+            },
+            onFocus: (e) => {
+              e.target.showPicker && e.target.showPicker();
+            },
+            className: "w-full sm:w-auto px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 text-sm bg-black text-white",
             style: { fontFamily: 'Andale Mono, monospace' }
           }),
-          React.createElement('button', {
+        React.createElement('button', {
             onClick: createNewProject,
-            disabled: !projectName || !releaseDate,
-            className: "w-full sm:w-auto px-4 py-2 bg-black text-white border border-white rounded-lg hover:bg-gray-900 disabled:bg-black-100 font-medium text-sm",
+            className: "w-full sm:w-auto px-4 py-2 bg-white text-black border border-black rounded-lg hover:opacity-80 font-medium text-sm",
             style: {
               fontFamily: 'Andale Mono, monospace',
               fontSize: '12px',
@@ -1288,23 +1600,29 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
         )
       ) : (
         // Mode projet existant
-        React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4" },
-          // Info projet
+        React.createElement('div', { className: "flex flex-col space-y-3 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4" },
+          // Info projet + bouton AUTO (groupés sur mobile)
           !showProjectEdit ? (
             React.createElement('div', { className: "flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3" },
+              // Ligne 1 mobile : Nom du projet + bouton AUTO | Desktop : séparés
+              React.createElement('div', { className: "flex items-center justify-between sm:justify-start space-x-2 sm:space-x-4" },
+               
+                React.createElement('button', {
+
+                  onClick: () => setShowProjectEdit(true),
+                  className: "flex-1 sm:flex-none px-3 py-2 bg-black text-white rounded-lg font-medium shadow-lg hover:bg-gray-900 transition-colors text-sm",
+                  style: {
+                    backgroundColor: 'black',
+                    color: 'white',
+                    border: '1px solid white',
+                    fontFamily: 'Andale Mono, monospace'
+                  }
+                }, projectName)
+              ),
+              // Date
               React.createElement('button', {
                 onClick: () => setShowProjectEdit(true),
-                className: "px-3 py-2 bg-black text-white rounded-lg font-medium shadow-lg hover:bg-gray-900 transition-colors text-sm",
-                style: {
-                  backgroundColor: 'black',
-                  color: 'white',
-                  border: '1px solid white',
-                  fontFamily: 'Andale Mono, monospace'
-                }
-              }, projectName),
-              React.createElement('button', {
-                onClick: () => setShowProjectEdit(true),
-                className: "px-3 py-2 bg-black text-white rounded-lg shadow-lg hover:bg-gray-900 transition-colors text-sm",
+                className: "w-full sm:w-auto px-3 py-2 bg-black text-white rounded-lg shadow-lg hover:bg-gray-900 transition-colors text-sm",
                 style: {
                   backgroundColor: 'black',
                   color: 'white',
@@ -1340,9 +1658,22 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
               )
             )
           ),
-          
+          React.createElement('button', {
+  onClick: () => {
+    const next = !autoScrollEnabled;
+    setAutoScrollEnabled(next);
+    localStorage.setItem('autoScrollEnabled', JSON.stringify(next));
+  },
+  className: `hidden sm:block px-3 py-2 text-xs border rounded transition-colors ${autoScrollEnabled ? 'bg-white text-black' : 'bg-transparent text-white border-white hover:bg-white hover:text-black'}`,
+  style: {
+    fontFamily: 'Andale Mono, monospace',
+    fontSize: '10px',
+    letterSpacing: '1px',
+    minWidth: '70px'
+  }
+}, autoScrollEnabled ? 'AUTO ON' : 'AUTO OFF'),
           // Boutons d'action
-         React.createElement('div', { className: "flex flex-wrap gap-8 sm:gap-2 justify-center sm:justify-end" },
+         React.createElement('div', { className: "hidden md:flex flex-wrap gap-8 sm:gap-2 justify-center sm:justify-end" },
             React.createElement('button', {
               onClick: () => window.open('https://chatgpt.com/g/g-68091c28e7108191bfef40e271e728ac-marty-ton-manager-qui-ne-dort-jamais', '_blank'),
               className: "flex items-center justify-center px-3 py-2 bg-black text-white border border-white rounded-xl hover:bg-gray-900 transition-colors",
@@ -1401,7 +1732,7 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
               React.createElement('div', { className: "text-center" },
                 React.createElement('button', {
                   onClick: () => setShowWeekTemplateModal(true),
-                  className: "px-6 py-3 bg-white text-black border border-black rounded-lg hover:bg-gray-50 font-medium",
+                  className: "px-6 py-3 bg-black text-white border border-white rounded-lg hover:bg-gray-900 font-medium",
 style: {
   fontFamily: 'Andale Mono, monospace',
   fontSize: '14px',
@@ -1409,10 +1740,10 @@ style: {
   letterSpacing: '3px',
   textTransform: 'uppercase'
 }
-}, "➕ Ajouter une semaine personnalisée")
+}, "✚ Ajouter une semaine personnalisée")
               ),
               weeks.map((week) =>
-                React.createElement('div', { key: week.id, className: "bg-white rounded-lg shadow-sm border overflow-hidden" },
+               React.createElement('div', { key: week.id, id: 'week-' + week.id, className: "bg-white rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:-translate-y-1" },
                   // En-tête de semaine
                   React.createElement('div', { 
                     className: `px-6 py-3 shadow-lg relative group ${
@@ -1441,21 +1772,39 @@ style: {
     title: "Supprimer"
   }, React.createElement(Trash2, { className: "w-4 h-4" }))
 ),
-                    React.createElement('h2', { 
-                      className: "font-bold pr-16",
-                      style: {
-                        fontFamily: 'Andale Mono, monospace',
-                        letterSpacing: '2px'
-                      }
-                    },
-                      week.isBilanPromo ? 
-                        `📊 FAIRE LE BILAN DE TA PROMO - ${week.startDate} 📊` :
-                        week.isReleaseDay ? 
-                        `🎊 LE JOUR DE TA SORTIE - ${week.startDate} 🎊` :
-                        week.isCustomWeek ?
-                        `${week.templateName} - SEMAINE ${week.number} DU ${week.startDate} AU ${week.endDate}` :
-                        `SEMAINE ${week.number} DU ${week.startDate} AU ${week.endDate}${week.isReleaseWeek ? ' - 🎉 SORTIE ! 🎉' : ''}`
-                    )
+                    React.createElement('div', {
+  className: "flex items-center space-x-3"
+},
+  (() => {
+  const today = new Date();
+  const releaseDateObj = new Date(releaseDate);
+  const daysDifference = Math.floor((today - releaseDateObj) / (1000 * 60 * 60 * 24));
+  const weeksDifference = Math.floor(daysDifference / 7);
+  return weeksDifference === week.weekOffset;
+})() && React.createElement('img', {
+  src: "https://static.wixstatic.com/media/2a5453_cb657584f3d742a58e3e745f3a225c77~mv2.png",
+  alt: "Semaine en cours",
+  className: "w-16 h-16 object-contain",
+  style: { 
+    transform: 'rotate(2deg)'
+  }
+}),
+  React.createElement('h2', { 
+    className: "font-bold",
+    style: {
+      fontFamily: 'Andale Mono, monospace',
+      letterSpacing: '2px'
+    }
+  },
+    week.isBilanPromo ? 
+      `📊 FAIRE LE BILAN DE TA PROMO - ${week.startDate} 📊` :
+      week.isReleaseDay ? 
+      `🎊 LE JOUR DE TA SORTIE - ${week.startDate} 🎊` :
+      week.isCustomWeek ?
+      `${week.templateName} - SEMAINE ${week.number} DU ${week.startDate} AU ${week.endDate}` :
+      `SEMAINE ${week.number} DU ${week.startDate} AU ${week.endDate}` + (week.isReleaseWeek ? ' - 🎉 SORTIE ! 🎉' : '')
+  )
+)
                   ),
                                
                   // Contenu de la semaine
@@ -1488,49 +1837,72 @@ style: {
                           )
                         ),
                         // Bouton Replay pour le bilan
-                        React.createElement('div', { className: "mt-4 flex justify-start" },
-                          React.createElement('button', {
-                            onClick: () => {
-                              if (week.youtubeReplayUrl) {
-                                window.open(week.youtubeReplayUrl, '_blank');
-                              } else {
-                                alert('Aucun lien configuré pour cette semaine');
-                              }
-                            },
-                            onContextMenu: (e) => {
-                              e.preventDefault();
-                              const newUrl = prompt('Entrez le lien YouTube pour cette semaine:', week.youtubeReplayUrl || '');
-                              if (newUrl !== null) {
-                                // Mettre à jour le lien pour cette semaine
-                                const updatedWeeks = weeks.map(w => 
-                                  w.id === week.id ? {...w, youtubeReplayUrl: newUrl} : w
-                                );
-                                setWeeks(updatedWeeks);
-                              }
-                            },
-                            className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
-                            style: {
-                              fontFamily: 'Andale Mono, monospace',
-                              fontSize: '14px',
-                              fontWeight: '500',
-                              letterSpacing: '5px',
-                              textTransform: 'uppercase'
-                            },
-                            title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
-                          },
-                            React.createElement('span', { 
-                              style: { marginRight: '8px', fontSize: '16px' }
-                            }, '▶'),
-                            React.createElement('span', null, 'LE REPLAY DU COURS')
-                          )
-                        )
+                       React.createElement('div', { className: "mt-4 space-y-3" },
+  // Barre de progression
+  React.createElement('div', { className: "flex items-center space-x-3" },
+    React.createElement('div', { className: "flex-1" },
+      React.createElement('div', { className: "progress-bar-container" },
+        React.createElement('div', { 
+          className: "progress-bar-fill",
+          style: { width: calculateWeekProgress(week) + '%' }
+        })
+      )
+    ),
+ React.createElement('span', {
+      className: "text-sm font-medium text-gray-600 min-w-[50px]",
+      style: { fontFamily: 'Andale Mono, monospace' }
+    }, calculateWeekProgress(week) + '%'),
+    React.createElement('span', {
+      className: "text-sm font-bold text-gray-700 ml-2 transition-all duration-500",
+      style: { 
+        fontFamily: 'Andale Mono, monospace',
+        opacity: animatingMessages[week.id] ? 1 : 0,
+        transform: animatingMessages[week.id] ? 'translateY(0)' : 'translateY(-10px)'
+      }
+    }, getRandomEncouragementMessage(calculateWeekProgress(week)))
+  ),
+  // Bouton replay
+  React.createElement('button', {
+    onClick: () => {
+      if (week.youtubeReplayUrl) {
+        window.open(week.youtubeReplayUrl, '_blank');
+      } else {
+        alert('Aucun lien configuré pour cette semaine');
+      }
+    },
+    onContextMenu: (e) => {
+      e.preventDefault();
+      const newUrl = prompt('Entrez le lien YouTube pour cette semaine:', week.youtubeReplayUrl || '');
+      if (newUrl !== null) {
+        const updatedWeeks = weeks.map(w => 
+          w.id === week.id ? {...w, youtubeReplayUrl: newUrl} : w
+        );
+        setWeeks(updatedWeeks);
+      }
+    },
+    className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+    style: {
+      fontFamily: 'Andale Mono, monospace',
+      fontSize: '14px',
+      fontWeight: '500',
+      letterSpacing: '5px',
+      textTransform: 'uppercase'
+    },
+    title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
+  },
+    React.createElement('span', { 
+      style: { marginRight: '8px', fontSize: '16px' }
+    }, '▶'),
+    React.createElement('span', null, 'LE REPLAY DU COURS')
+  )
+)
                       )
                     ) : (
                       // Sections normales (todo + fan)
                       React.createElement('div', null,
                         React.createElement('div', { className: "grid lg:grid-cols-2 gap-6" },
                           // Section Todo
-                          React.createElement('div', { className: "p-4 border-2 border-dashed rounded-lg min-h-[200px] border-gray-300 hover:border-blue-400" },
+                          React.createElement('div', { className: "p-4 border-2 border-dashed rounded-lg min-h-[200px] border-gray-300 hover:border-pink-400" },
                             React.createElement('div', { className: "flex items-center justify-between mb-4" },
                               React.createElement('h3', { 
                                 className: "font-semibold text-gray-900",
@@ -1592,48 +1964,178 @@ style: {
                           )
                         ),
                         // Bouton Replay pour les semaines normales
-                        React.createElement('div', { className: "mt-4 flex justify-start" },
-                          React.createElement('button', {
-                            onClick: () => {
-                              if (week.youtubeReplayUrl) {
-                                window.open(week.youtubeReplayUrl, '_blank');
-                              } else {
-                                alert('Aucun lien configuré pour cette semaine');
-                              }
-                            },
-                            onContextMenu: (e) => {
-                              e.preventDefault();
-                              const newUrl = prompt('Entrez le lien YouTube pour cette semaine:', week.youtubeReplayUrl || '');
-                              if (newUrl !== null) {
-                                // Mettre à jour le lien pour cette semaine
-                                const updatedWeeks = weeks.map(w => 
-                                  w.id === week.id ? {...w, youtubeReplayUrl: newUrl} : w
-                                );
-                                setWeeks(updatedWeeks);
-                              }
-                            },
-                            className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
-                            style: {
-                              fontFamily: 'Andale Mono, monospace',
-                              fontSize: '14px',
-                              fontWeight: '500',
-                              letterSpacing: '5px',
-                              textTransform: 'uppercase'
-                            },
-                            title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
-                          },
-                            React.createElement('span', { 
-                              style: { marginRight: '8px', fontSize: '16px' }
-                            }, '▶'),
-                            React.createElement('span', null, 'LE REPLAY DU COURS')
-                          )
-                        )
+                        React.createElement('div', { className: "mt-4 space-y-3" },
+  // Barre de progression
+  React.createElement('div', { className: "flex items-center space-x-3" },
+    React.createElement('div', { className: "flex-1" },
+      React.createElement('div', { className: "progress-bar-container" },
+        React.createElement('div', { 
+          className: "progress-bar-fill",
+          style: { width: calculateWeekProgress(week) + '%' }
+        })
+      )
+    ),
+React.createElement('span', {
+      className: "text-sm font-medium text-gray-600 min-w-[50px]",
+      style: { fontFamily: 'Andale Mono, monospace' }
+    }, calculateWeekProgress(week) + '%'),
+    React.createElement('span', {
+      className: "text-sm font-bold text-gray-700 ml-2 transition-all duration-500",
+      style: { 
+        fontFamily: 'Andale Mono, monospace',
+        opacity: animatingMessages[week.id] ? 1 : 0,
+        transform: animatingMessages[week.id] ? 'translateY(0)' : 'translateY(-10px)'
+      }
+    }, getRandomEncouragementMessage(calculateWeekProgress(week)))
+  ),
+  // Bouton replay
+  React.createElement('button', {
+    onClick: () => {
+      if (week.youtubeReplayUrl) {
+        window.open(week.youtubeReplayUrl, '_blank');
+      } else {
+        alert('Aucun lien configuré pour cette semaine');
+      }
+    },
+    onContextMenu: (e) => {
+      e.preventDefault();
+      const newUrl = prompt('Entrez le lien YouTube pour cette semaine:', week.youtubeReplayUrl || '');
+      if (newUrl !== null) {
+        const updatedWeeks = weeks.map(w => 
+          w.id === week.id ? {...w, youtubeReplayUrl: newUrl} : w
+        );
+        setWeeks(updatedWeeks);
+      }
+    },
+    className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+    style: {
+      fontFamily: 'Andale Mono, monospace',
+      fontSize: '14px',
+      fontWeight: '500',
+      letterSpacing: '5px',
+      textTransform: 'uppercase'
+    },
+    title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
+  },
+    React.createElement('span', { 
+      style: { marginRight: '8px', fontSize: '16px' }
+    }, '▶'),
+    React.createElement('span', null, 'LE REPLAY DU COURS')
+  )
+)
                       )
                     )
                   )
                 )
               )
             ),
+// === MENU BURGER FLOTTANT MOBILE ===
+            projectCode && React.createElement('div', { className: "md:hidden" },
+              // Bouton burger principal
+              React.createElement('button', {
+                onClick: () => setShowFloatingMenu(!showFloatingMenu),
+                className: "fixed bottom-6 right-6 w-14 h-14 bg-black text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center z-50 border border-white",
+                style: {
+                  fontFamily: 'Andale Mono, monospace'
+                }
+              }, React.createElement('span', { 
+  style: { 
+    fontSize: '24px',
+    lineHeight: '0',
+    display: 'block',
+    transform: 'translateY(-1px)'
+  } 
+}, showFloatingMenu ? "✕" : "☰")),
+              showFloatingMenu && React.createElement('div', { 
+  className: "fixed bottom-24 right-6 flex flex-col space-y-3 z-40 animate-in fade-in slide-in-from-bottom-2 duration-300",
+  style: {
+    animation: showFloatingMenu ? 'slideInUp 0.3s ease-out forwards' : 'slideOutDown 0.3s ease-in forwards'
+  }
+},
+                // Bouton Marty
+                React.createElement('button', {
+  onClick: () => {
+    window.open('https://chatgpt.com/g/g-68091c28e7108191bfef40e271e728ac-marty-ton-manager-qui-ne-dort-jamais', '_blank');
+    setShowFloatingMenu(false);
+  },
+  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg border border-white flex items-center justify-center transition-all duration-300"
+}, React.createElement('svg', {
+  className: "w-6 h-6",
+  fill: "none",
+  stroke: "white",
+  viewBox: "0 0 24 24",
+  style: { 
+    strokeWidth: 2,
+    display: 'block',
+    margin: 'auto'
+  }
+},
+  React.createElement('path', {
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+  })
+)),
+                
+                // Bouton Import
+                React.createElement('button', {
+  onClick: () => {
+    setShowImportModal(true);
+    setShowFloatingMenu(false);
+  },
+  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg border border-white flex items-center justify-center transition-all duration-300"
+}, React.createElement('img', {
+  src: "https://static.wixstatic.com/media/2a5453_ec59e6e1b9db467890393da44d7ef57d~mv2.png",
+  alt: "Importer",
+  className: "h-5 w-5"
+})),
+                
+                // Bouton Export
+               React.createElement('button', {
+  onClick: () => {
+    exportData();
+    setShowFloatingMenu(false);
+  },
+  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg border border-white flex items-center justify-center transition-all duration-300"
+}, React.createElement('img', {
+  src: "https://static.wixstatic.com/media/2a5453_222c757e9387488aba80defdff87d6e9~mv2.png",
+  alt: "Télécharger",
+  className: "h-5 w-5"
+})),
+                
+                // Bouton Nouveau
+               React.createElement('button', {
+  onClick: () => {
+    resetProject();
+    setShowFloatingMenu(false);
+  },
+  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-300"
+}, React.createElement('img', {
+  src: "https://static.wixstatic.com/media/2a5453_fb103c66d0f94b5fb48f7cd8af67cefb~mv2.png",
+  alt: "Nouveau",
+  className: "h-5 w-5"
+})),
+
+                // Bouton Auto Scroll
+                React.createElement('button', {
+                  onClick: () => {
+                    const next = !autoScrollEnabled;
+                    setAutoScrollEnabled(next);
+                    localStorage.setItem('autoScrollEnabled', JSON.stringify(next));
+                    setShowFloatingMenu(false);
+                  },
+                  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-300"
+                }, React.createElement('span', {
+                  style: {
+                    fontFamily: 'Andale Mono, monospace',
+                    fontSize: '12px',
+                    letterSpacing: '1px',
+                    lineHeight: '1',
+                    textAlign: 'center'
+                  }
+                }, autoScrollEnabled ? 'ON' : 'OFF'))
+              )
+),
 
             // === ÉCRAN DE BIENVENUE ===
 !projectCode && React.createElement('div', { className: "min-h-screen bg-black flex flex-col items-center text-center px-4", style: { paddingTop: '80px', paddingBottom: '80px' } },
@@ -1648,15 +2150,8 @@ style: {
     textTransform: 'uppercase'
   }
 }, "▶ Voir le tuto"),
-React.createElement('h2', { 
-  className: "text-white mb-8 text-3xl font-bold",
-  style: { 
-    fontFamily: 'Andale Mono, monospace',
-    letterSpacing: '3px'
-  }
-  }, "BIENVENUE DANS TON RÉTRO-PLANNING PROMO"),
-  React.createElement('div', { 
-  className: "mb-8 text-center",
+ React.createElement('div', { 
+  className: "mb-8 text-center px-12 sm:px-0",
   style: { 
     transform: 'rotate(-2deg)',
     lineHeight: '1.2'
@@ -1668,7 +2163,7 @@ React.createElement('h2', {
       fontFamily: 'Andale Mono, monospace',
       fontSize: '16px',
       fontWeight: '500',
-      backgroundColor: '#fff500',
+      backgroundColor: '#fcff00',
       margin: '0 0 4px 0'
     }
   }, "Organise ta promotion musicale étape par étape."),
@@ -1679,15 +2174,20 @@ React.createElement('h2', {
       fontFamily: 'Andale Mono, monospace',
       fontSize: '16px',
       fontWeight: '500',
-      backgroundColor: '#fff500',
+      backgroundColor: '#fcff00',
       margin: '0'
     }
   }, "Crée un nouveau projet en utilisant les champs ci-dessus.")
 ),
-  React.createElement('img', {
-    src: "https://static.wixstatic.com/media/2a5453_c67ebe3814014de589855dc4d7daf906~mv2.png",
+React.createElement('img', {
+    src: "https://static.wixstatic.com/media/2a5453_8ad701da5b84431c87c8ebd5a80e0a26~mv2.png",
     alt: "Rock hands",
-    className: "max-w-md w-full h-auto"
+   className: "w-1/3 sm:w-3/5 md:w-1/2 lg:w-1/4 xl:w-1/5 h-auto mx-auto transition-all duration-300",
+    style: {
+      animation: 'fadeInUp 1s ease-out forwards',
+      opacity: 0,
+      transform: 'translateY(30px)'
+    }
   })
 ),
 
@@ -1793,7 +2293,8 @@ React.createElement('h2', {
                       React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Fichiers"),
                       React.createElement('button', { 
                         onClick: () => fileInputRef.current && fileInputRef.current.click(), 
-                        className: "px-4 py-2 bg-gray-100 rounded text-sm hover:bg-gray-200"
+                       className: "px-4 py-2 rounded text-sm hover:opacity-80 text-black font-mono",
+style: { backgroundColor: '#fffc00' }
                       }, "Ajouter fichiers"),
                       React.createElement('input', { 
                         type: "file", 
@@ -1816,7 +2317,8 @@ React.createElement('h2', {
                 React.createElement('div', { className: "p-4 border-t flex justify-end" },
                   React.createElement('button', { 
                     onClick: saveTask, 
-                    className: "bg-blue-600 text-white px-6 py-2 rounded-lg text-sm" 
+                    className: "px-6 py-2 rounded-lg text-sm text-black font-mono",
+style: { backgroundColor: '#fffc00' }
                   }, "Sauvegarder")
                 )
               )
@@ -1872,7 +2374,8 @@ React.createElement('h2', {
                       href: showTaskDetail.externalUrl, 
                       target: "_blank", 
                       rel: "noopener noreferrer",
-                      className: "inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                     className: "inline-flex items-center px-3 py-2 rounded-lg hover:opacity-80 text-black font-mono",
+style: { backgroundColor: '#fffc00' }
                     }, showTaskDetail.externalButtonText || 'Voir le lien')
                   ),
                   showTaskDetail.files && showTaskDetail.files.length > 0 && React.createElement('div', null,
@@ -1893,7 +2396,8 @@ React.createElement('h2', {
                       openTaskModal(showTaskDetail, showTaskDetail.weekId, showTaskDetail.taskType);
                       setShowTaskDetail(null);
                     },
-                    className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                  className: "px-4 py-2 rounded-lg hover:opacity-80 flex items-center space-x-2 font-mono",
+style: { backgroundColor: '#000000', color: '#fffc00' }
                   },
                     React.createElement(Edit, { className: "w-4 h-4" }),
                     React.createElement('span', null, "Modifier")
@@ -1922,7 +2426,8 @@ React.createElement('h2', {
                   }),
                   React.createElement('button', { 
                     onClick: () => setShowImportModal(false), 
-                    className: "w-full px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                    className: "w-full px-4 py-2 rounded-lg hover:opacity-80 text-black font-mono",
+style: { backgroundColor: '#fffc00' }
                   }, "Annuler")
                 )
               )
@@ -1996,7 +2501,7 @@ showVideoModal && React.createElement('div', { className: "fixed inset-0 bg-blac
           addCustomWeek(template.id, parseInt(position), customWeekTitle.trim());
         }
       },
-      className: "px-4 py-2 text-black rounded hover:opacity-80 w-full",
+    className: "px-4 py-2 text-black rounded hover:opacity-80 w-full font-mono",
 style: { backgroundColor: '#fff500' }
     }, "Ajouter cette semaine")
   ) :
@@ -2007,7 +2512,7 @@ style: { backgroundColor: '#fff500' }
         addCustomWeek(template.id, parseInt(position));
       }
     },
-className: "px-4 py-2 text-black rounded hover:opacity-80",
+className: "px-4 py-2 text-black rounded hover:opacity-80 font-mono",
 style: { backgroundColor: '#fff500' }
   }, "Ajouter cette semaine")
                     )
