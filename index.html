@@ -1490,16 +1490,25 @@ toggleTaskCompleted(task.id, weekId, taskType);
                className: "custom-checkbox"
               }),
               React.createElement('span', { 
-              className: `flex-1 cursor-pointer ${task.completed ? 'task-completed text-gray-500' : 'text-gray-900'}`,
+             className: `flex-1 cursor-pointer ${task.completed ? 'task-completed text-gray-500' : 'text-gray-900'}`,
                 onClick: (e) => { 
                   e.stopPropagation(); 
                   setOpenMobileMenu(null);
                   setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType })); 
                 },
+                onTouchStart: (e) => {
+                  e.target.startY = e.touches[0].clientY;
+                },
                 onTouchEnd: (e) => {
                   e.stopPropagation();
-                  setOpenMobileMenu(null);
-                  setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType }));
+                  const endY = e.changedTouches[0].clientY;
+                  const diffY = Math.abs(endY - e.target.startY);
+                  
+                  // Seulement si le mouvement est inférieur à 10px (pas un scroll)
+                  if (diffY < 10) {
+                    setOpenMobileMenu(null);
+                    setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType }));
+                  }
                 }
          }, task.title),
              // Menu 3 points sur mobile
