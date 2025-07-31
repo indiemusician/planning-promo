@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rétro-Planning Musical - IndieMusician</title>
-<link rel="icon" type="image/png" href="https://static.wixstatic.com/media/2a5453_c67ebe3814014de589855dc4d7daf906~mv2.png">
+<link rel="icon" type="image/png" href="https://static.wixstatic.com/media/2a5453_f52064aebffb43cdb064ad1ccb684526~mv2.png">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -156,6 +156,152 @@
   text-decoration: line-through;
   transition: all 0.3s ease;
 }
+/* Animations pour les tâches */
+@keyframes taskSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.95);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 200px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+}
+
+@keyframes taskSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 200px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.95);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+}
+
+.task-entering {
+  animation: taskSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.task-exiting {
+  animation: taskSlideOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.task-item {
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.task-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Surbrillance rose-jaune légère */
+@keyframes softGradientGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 105, 180, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 252, 0, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 105, 180, 0.3);
+  }
+}
+
+@keyframes gentleFloat {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes fadeInStar {
+  0% {
+    opacity: 0;
+    transform: translateX(-15px) scale(0.5);
+  }
+  100% {
+    opacity: 0.8;
+    transform: translateX(-20px) scale(1);
+  }
+}
+
+.task-highlighted {
+  position: relative;
+  border: 1px solid rgba(255, 105, 180, 0.4) !important;
+  background: linear-gradient(135deg, 
+    rgba(255, 182, 193, 0.15) 0%, 
+    rgba(255, 218, 185, 0.15) 50%, 
+    rgba(255, 255, 224, 0.15) 100%) !important;
+  box-shadow: 
+    0 2px 8px rgba(255, 105, 180, 0.1),
+    0 1px 3px rgba(255, 252, 0, 0.1);
+  animation: 
+    softGradientGlow 3s ease-in-out,
+    gentleFloat 2s ease-in-out infinite;
+  transition: all 0.4s ease;
+  border-radius: 8px !important;
+}
+
+.task-highlighted::before {
+  content: '✨';
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  animation: fadeInStar 0.6s ease-out;
+  filter: hue-rotate(20deg);
+}
+
+.task-highlighted span {
+  background: linear-gradient(135deg, #ff69b4 0%, #ffa500 50%, #fffc00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 500 !important;
+}
+
+.task-highlighted .custom-checkbox {
+  border: 1px solid rgba(255, 105, 180, 0.6) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+
+.task-highlighted .custom-checkbox:checked {
+  background: linear-gradient(135deg, #ff69b4 0%, #fffc00 100%) !important;
+  border-color: #ff69b4 !important;
+}
+
+.task-highlighted .custom-checkbox:checked::after {
+  background: white !important;
+}
 </style>
 </head>
 <body>
@@ -273,6 +419,7 @@ const createConfetti = (element) => {
           const [taskExternalUrl, setTaskExternalUrl] = useState('');
           const [taskExternalButtonText, setTaskExternalButtonText] = useState('');
           const [taskFiles, setTaskFiles] = useState([]);
+const [taskLinks, setTaskLinks] = useState([]);
           const [showTaskDetail, setShowTaskDetail] = useState(null);
           const [showImportModal, setShowImportModal] = useState(false);
           const [showProjectEdit, setShowProjectEdit] = useState(false);
@@ -292,6 +439,11 @@ const [isAuthenticated, setIsAuthenticated] = useState(() => {
   return localStorage.getItem('planning_auth') === 'true';
 });
 const [password, setPassword] = useState('');
+const [searchQuery, setSearchQuery] = useState('');
+const [searchResults, setSearchResults] = useState([]);
+const [showSearchResults, setShowSearchResults] = useState(false);
+const [showSearchModal, setShowSearchModal] = useState(false);
+const [highlightedTask, setHighlightedTask] = useState(null);
 
           // Templates de semaines prédéfinies
           const getWeekTemplates = () => [
@@ -373,6 +525,86 @@ const handleLogout = () => {
   setIsAuthenticated(false);
   localStorage.removeItem('planning_auth');
 };
+// Fonction de recherche
+const searchTasks = (query) => {
+  if (!query.trim()) {
+    setSearchResults([]);
+    setShowSearchResults(false);
+    return;
+setSearchResults(results);
+  setShowSearchResults(results.length > 0);
+  
+  // Auto-scroll vers les résultats si on en trouve
+  if (results.length > 0) {
+    setTimeout(() => {
+      const resultsElement = document.getElementById('search-results');
+      if (resultsElement) {
+        resultsElement.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, 100);
+  }
+};
+  
+
+
+  const results = [];
+  const searchTerm = query.toLowerCase();
+
+  weeks.forEach(week => {
+    // Rechercher dans les tâches TODO
+    week.todoTasks?.forEach(task => {
+      if (task.title.toLowerCase().includes(searchTerm) || 
+          task.description.toLowerCase().includes(searchTerm)) {
+        results.push({
+          ...task,
+          weekId: week.id,
+          weekName: week.number,
+          taskType: 'todo',
+          weekTitle: week.isBilanPromo ? 
+            `📊 FAIRE LE BILAN DE TA PROMO - ${week.startDate} 📊` :
+            week.isReleaseDay ? 
+            `🎊 LE JOUR DE TA SORTIE - ${week.startDate} 🎊` :
+            week.isCustomWeek ?
+            `${week.templateName} - SEMAINE ${week.number}` :
+            `SEMAINE ${week.number}`
+        });
+      }
+    });
+
+    // Rechercher dans les tâches FAN
+    week.fanTasks?.forEach(task => {
+      if (task.title.toLowerCase().includes(searchTerm) || 
+          task.description.toLowerCase().includes(searchTerm)) {
+        results.push({
+          ...task,
+          weekId: week.id,
+          weekName: week.number,
+          taskType: 'fan',
+          weekTitle: week.isBilanPromo ? 
+            `📊 FAIRE LE BILAN DE TA PROMO - ${week.startDate} 📊` :
+            week.isReleaseDay ? 
+            `🎊 LE JOUR DE TA SORTIE - ${week.startDate} 🎊` :
+            week.isCustomWeek ?
+            `${week.templateName} - SEMAINE ${week.number}` :
+            `SEMAINE ${week.number}`
+        });
+      }
+    });
+  });
+
+  setSearchResults(results);
+  setShowSearchResults(true);
+};
+
+// Gérer la recherche en temps réel
+const handleSearchChange = (e) => {
+  const query = e.target.value;
+  setSearchQuery(query);
+  searchTasks(query);
+};
 // Messages d'encouragement aléatoires
 const getRandomEncouragementMessage = (percentage) => {
   const messages = [
@@ -413,6 +645,7 @@ const calculateWeekProgress = (week) => {
   return Math.round((completedTasks / totalTasks) * 100);
 };
           // Fonction pour générer un code projet unique
+
           const generateProjectCode = () => {
             const prefix = 'MUSIC';
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -552,7 +785,7 @@ const calculateWeekProgress = (week) => {
     title: 'Protéger ton titre à la Sacem ou sur MusicStart',
     description: 'C\'EST QUOI ?\n\nProtéger sa musique, c\'est s\'assurer que tes créations sont reconnues légalement comme étant les tiennes. Cela te donne le contrôle sur la façon dont elles sont utilisées et partagées, te protégeant contre l\'utilisation non autorisée ou le plagiat.\n_________\n\nPOURQUOI IL FAUT LE FAIRE ?\n\nCette protection est essentielle pour maintenir ton intégrité artistique et pour garantir que tu es justement rémunéré pour ton travail. Elle te permet aussi de négocier des droits avec des tiers, comme des maisons de disques ou des distributeurs.\n__________\n\nQU\'EST-CE QUE ÇA VA T\'APPORTER ?\n\nLa tranquillité d\'esprit que ton travail est sécurisé, une reconnaissance professionnelle accrue et des opportunités financières liées à l\'utilisation de tes œuvres.\n\n_________\n\nCOMMENT LE FAIRE ?\n\nEn rejoignant une société de gestion collective comme la Sacem, tu bénéficies de leur expertise en matière de droits d\'auteur. Ils s\'occupent de l\'enregistrement de tes œuvres, suivent leur utilisation, et collectent et redistribuent les revenus générés.',
     externalUrl: 'https://www.musicstart.com/fr',
-    externalButtonText: 'Lien vers Music Start'
+    externalButtonText: 'Lien vers Music Start' ,
   },
   {
     title: 'Mettre en distribution ton single',
@@ -594,7 +827,7 @@ const calculateWeekProgress = (week) => {
                 '-2': [
   {
     title: 'Créer ton dossier de presse digital',
-    description: 'Un EPK, c\'est comme une carte de visite ultra stylée pour les artistes.\nEPK = Electronic Press Kit. C\'est un mini site (ou un PDF) qui regroupe tout ce qu\'un pro a besoin de savoir sur toi : ta bio, ta musique, tes clips, tes photos, tes dates, tes réseaux et tes infos de contact.\n\nC\'est un indispensable pour ta promo : quand tu contactes un label, un média ou un programmateur, tu peux pas juste envoyer un lien Spotify. Avec un EPK bien foutu, tu montres direct que tu es prêt, pro, et que ton projet mérite d\'être écouté.',
+    description: 'Un EPK, c\'est comme une carte de visite ultra stylée pour les artistes.\nEPK = Electronic Press Kit. C\'est un mini site (ou un PDF) qui regroupe tout ce qu\'un pro a besoin de savoir sur toi : ta bio, ta musique, tes clips, tes photos, tes dates, tes réseaux et tes infos de contact.\n\nC\'est un indispensable pour ta promo : quand tu contactes un label, un média ou un programmateur, tu peux pas juste envoyer un lien Spotify. Avec un EPK bien foutu, tu montres direct que tu es prêt, pro, et que ton projet mérite d\'être écouté.', 
     externalUrl: 'https://www.canva.com/design/DAGTArzenL8/DBXNUeK_BzW_X5gP4Tbp0g/edit?utm_content=DAGTArzenL8&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton',
     externalButtonText: 'Lien vers le template EPK PRO Canva à dupliquer'
   },
@@ -1278,7 +1511,42 @@ const updateProjectDate = (newDate) => {
               setTaskInstagramTitle(task.instagramTitle || '');
               setTaskExternalUrl(task.externalUrl || '');
               setTaskExternalButtonText(task.externalButtonText || '');
-              setTaskFiles(task.files || []);
+              
+              // Convertir les anciens liens vers le nouveau format
+              const convertedLinks = [];
+              
+              // Ajouter le lien YouTube s'il existe
+              if (task.youtubeUrl) {
+                convertedLinks.push({
+                  id: 'youtube-' + Date.now(),
+                  type: 'youtube',
+                  url: task.youtubeUrl,
+                  title: task.youtubeTitle || ''
+                });
+              }
+              
+              // Ajouter le lien Instagram s'il existe
+              if (task.instagramUrl) {
+                convertedLinks.push({
+                  id: 'instagram-' + Date.now(),
+                  type: 'instagram',
+                  url: task.instagramUrl,
+                  title: task.instagramTitle || ''
+                });
+              }
+              
+              // Ajouter le lien externe s'il existe
+              if (task.externalUrl) {
+                convertedLinks.push({
+                  id: 'externe-' + Date.now(),
+                  type: 'externe',
+                  url: task.externalUrl,
+                  title: task.externalButtonText || ''
+                });
+              }
+              
+              // Utiliser les nouveaux liens s'ils existent, sinon utiliser les convertis
+              setTaskLinks(task.links || convertedLinks);
             } else {
               // Mode création - vider tous les champs
               setTaskTitle(''); 
@@ -1289,7 +1557,7 @@ const updateProjectDate = (newDate) => {
               setTaskInstagramTitle('');
               setTaskExternalUrl('');
               setTaskExternalButtonText('');
-              setTaskFiles([]);
+             setTaskLinks([]);
             }
             setShowTaskModal(true);
           };
@@ -1307,7 +1575,7 @@ const updateProjectDate = (newDate) => {
             setTaskInstagramTitle('');
             setTaskExternalUrl('');
             setTaskExternalButtonText('');
-            setTaskFiles([]);
+           setTaskLinks([]);
           };
 
           // Sauvegarder une tâche (création ou modification)
@@ -1317,18 +1585,26 @@ const updateProjectDate = (newDate) => {
               return;
             }
             
+            // Extraire les liens par type pour la compatibilité
+            const youtubeLink = taskLinks.find(link => link.type === 'youtube');
+            const instagramLink = taskLinks.find(link => link.type === 'instagram');
+            const externeLink = taskLinks.find(link => link.type === 'externe');
+            
             const taskData = {
               id: editingTask ? editingTask.id : 'task-' + Date.now(),
               title: taskTitle.trim(),
               completed: editingTask ? editingTask.completed : false,
               description: taskDescription.trim(),
-              youtubeUrl: taskYouTube.trim(),
-              youtubeTitle: taskYouTubeTitle.trim(),
-              instagramUrl: taskInstagram.trim(),
-              instagramTitle: taskInstagramTitle.trim(),
-              externalUrl: taskExternalUrl.trim(),
-              externalButtonText: taskExternalButtonText.trim(),
-              files: taskFiles
+              // Garder l'ancien format pour la compatibilité
+              youtubeUrl: youtubeLink ? youtubeLink.url : taskYouTube.trim(),
+              youtubeTitle: youtubeLink ? youtubeLink.title : taskYouTubeTitle.trim(),
+              instagramUrl: instagramLink ? instagramLink.url : taskInstagram.trim(),
+              instagramTitle: instagramLink ? instagramLink.title : taskInstagramTitle.trim(),
+              externalUrl: externeLink ? externeLink.url : taskExternalUrl.trim(),
+              externalButtonText: externeLink ? externeLink.title : taskExternalButtonText.trim(),
+              // Nouveau format
+              links: taskLinks,
+              files: []
             };
             
             const newWeeks = weeks.map(week => {
@@ -1469,9 +1745,31 @@ const updateProjectDate = (newDate) => {
             }));
             setTaskFiles(prev => prev.concat(fileObjects));
           };
+// Ajouter un nouveau lien
+const addNewLink = () => {
+  const newLink = {
+    id: 'link-' + Date.now(),
+    type: 'youtube',
+    url: '',
+    title: ''
+  };
+  setTaskLinks(prev => [...prev, newLink]);
+};
+
+// Supprimer un lien
+const removeLink = (linkId) => {
+  setTaskLinks(prev => prev.filter(link => link.id !== linkId));
+};
+
+// Mettre à jour un lien
+const updateLink = (linkId, field, value) => {
+  setTaskLinks(prev => prev.map(link => 
+    link.id === linkId ? { ...link, [field]: value } : link
+  ));
+};
 // Composant pour afficher une tâche individuelle
           const TaskItem = ({ task, taskIndex, weekId, taskType, totalTasks }) => (
-            React.createElement('div', { className: "flex items-center space-x-2 p-2 bg-white rounded border hover:shadow-md group transition-all duration-200" },
+           React.createElement('div', { className: `flex items-center space-x-2 p-2 bg-white rounded border hover:shadow-md group transition-all duration-200 ${highlightedTask === task.id ? 'task-highlighted' : ''}` },
               React.createElement('input', { 
                 type: "checkbox", 
                 checked: task.completed, 
@@ -1677,13 +1975,13 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
         }),
         React.createElement('div', { className: "flex items-center space-x-3" },
       
-          React.createElement('h1', { 
+         React.createElement('h1', { 
             className: "text-lg sm:text-xl font-bold text-white",
             style: { 
               fontFamily: 'Andale Mono, monospace',
               letterSpacing: '5px'
             }
-          }, "PLANNING PROMO")
+          }, "PLANNING PROMO"),
         )
       ),
       
@@ -1793,7 +2091,7 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
     setAutoScrollEnabled(next);
     localStorage.setItem('autoScrollEnabled', JSON.stringify(next));
   },
-  className: `hidden sm:block px-3 py-2 text-xs border rounded transition-colors ${autoScrollEnabled ? 'bg-white text-black' : 'bg-transparent text-white border-white hover:bg-white hover:text-black'}`,
+  className: `hidden sm:block px-3 py-2 text-xs border rounded-lg transition-colors ${autoScrollEnabled ? 'bg-white text-black' : 'bg-transparent text-white border-white hover:bg-white hover:text-black'}`,
   style: {
     fontFamily: 'Andale Mono, monospace',
     fontSize: '10px',
@@ -1802,10 +2100,10 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
   }
 }, autoScrollEnabled ? 'AUTO ON' : 'AUTO OFF'),
           // Boutons d'action
-         React.createElement('div', { className: "hidden md:flex flex-wrap gap-8 sm:gap-2 justify-center sm:justify-end" },
+      React.createElement('div', { className: "hidden md:flex flex-wrap gap-6 justify-center sm:justify-end items-center" },
             React.createElement('button', {
               onClick: () => window.open('https://chatgpt.com/g/g-68091c28e7108191bfef40e271e728ac-marty-ton-manager-qui-ne-dort-jamais', '_blank'),
-              className: "flex items-center justify-center px-3 py-2 bg-black text-white border border-white rounded-xl hover:bg-gray-900 transition-colors",
+              className: "flex items-center justify-center px-3 py-2 bg-black text-white border border-white rounded-lg hover:bg-gray-900 transition-colors",
               style: {
                 fontFamily: 'Andale Mono, monospace',
                 fontSize: '10px',
@@ -1827,26 +2125,33 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
                   d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 })
               ),
-              React.createElement('span', { className: "hidden sm:inline" }, 'PARLER À MARTY')
+            React.createElement('span', { className: "hidden sm:inline" }, 'PARLER À MARTY')
             ),
+            React.createElement('img', {
+              src: "https://static.wixstatic.com/media/2a5453_e464b1ffcda4418b91507a753c278f6a~mv2.png",
+              alt: "Rechercher",
+              onClick: () => setShowSearchModal(true),
+            className: "h-5 w-5 cursor-pointer hover:opacity-75 transition-opacity"
+            }),
             React.createElement('img', {
               src: "https://static.wixstatic.com/media/2a5453_ec59e6e1b9db467890393da44d7ef57d~mv2.png",
               alt: "Importer",
               onClick: () => setShowImportModal(true),
-              className: "h-6 w-6 cursor-pointer hover:opacity-75 transition-opacity"
+          className: "h-5 w-5 cursor-pointer hover:opacity-75 transition-opacity"
             }),
             React.createElement('img', {
               src: "https://static.wixstatic.com/media/2a5453_222c757e9387488aba80defdff87d6e9~mv2.png",
               alt: "Télécharger",
               onClick: exportData,
-              className: "h-6 w-6 cursor-pointer hover:opacity-75 transition-opacity"
+             className: "h-5 w-5 cursor-pointer hover:opacity-75 transition-opacity"
             }),
             React.createElement('img', {
               src: "https://static.wixstatic.com/media/2a5453_fb103c66d0f94b5fb48f7cd8af67cefb~mv2.png",
               alt: "Nouveau",
               onClick: resetProject,
-              className: "h-6 w-6 cursor-pointer hover:opacity-75 transition-opacity"
+             className: "h-5 w-5 cursor-pointer hover:opacity-75 transition-opacity"
             })
+
           )
         )
       )
@@ -1855,24 +2160,24 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
 ),
                   
                  
-            // === CONTENU PRINCIPAL ===
+           // === CONTENU PRINCIPAL ===
             projectCode && weeks.length > 0 && React.createElement('div', { className: "max-w-7xl mx-auto px-4 py-6 space-y-6" },
               // Bouton d'ajout de semaine
               React.createElement('div', { className: "text-center" },
                 React.createElement('button', {
                   onClick: () => setShowWeekTemplateModal(true),
                   className: "px-6 py-3 bg-black text-white border border-white rounded-lg hover:bg-gray-900 font-medium",
-style: {
-  fontFamily: 'Andale Mono, monospace',
-  fontSize: '14px',
-  fontWeight: '500',
-  letterSpacing: '3px',
-  textTransform: 'uppercase'
-}
-}, "✚ Ajouter une semaine personnalisée")
+                  style: {
+                    fontFamily: 'Andale Mono, monospace',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    letterSpacing: '3px',
+                    textTransform: 'uppercase'
+                  }
+                }, "✚ Ajouter une semaine personnalisée")
               ),
               weeks.map((week) =>
-               React.createElement('div', { key: week.id, id: 'week-' + week.id, className: "bg-white rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:-translate-y-1" },
+              React.createElement('div', { key: week.id, id: 'week-' + week.id, className: "bg-white rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:-translate-y-1" },
                   // En-tête de semaine
                   React.createElement('div', { 
                     className: `px-6 py-3 shadow-lg relative group ${
@@ -2158,6 +2463,86 @@ React.createElement('span', {
                 )
               )
             ),
+// === BOUTON REFRESH DISCRET ===
+            projectCode && React.createElement('button', {
+              onClick: () => {
+                if (confirm('🔄 Actualiser les tâches ?\n\n✅ Vos progrès seront conservés\n🔗 Les nouveaux liens seront ajoutés')) {
+                  // Sauvegarder TOUTES les tâches existantes (progrès + tâches personnalisées)
+                  const existingTasks = {};
+                  weeks.forEach(week => {
+                    existingTasks[week.weekOffset] = {
+                      todoTasks: week.todoTasks || [],
+                      fanTasks: week.fanTasks || []
+                    };
+                  });
+                  
+                  const customWeeks = weeks.filter(w => w.isCustomWeek).map(w => ({
+                    weekOffset: w.weekOffset, 
+                    templateId: w.templateId, 
+                    templateName: w.templateName
+                  }));
+                  
+                  const newWeeks = generateWeeks(releaseDate, customWeeks).map(week => {
+                    const existing = existingTasks[week.weekOffset];
+                    if (existing) {
+                      // Fusionner les tâches : nouvelles du code + anciennes personnalisées
+                      const mergedTodoTasks = [...week.todoTasks];
+                      const mergedFanTasks = [...week.fanTasks];
+                      
+                      // Ajouter les tâches personnalisées qui ne sont pas dans le code
+                      existing.todoTasks.forEach(existingTask => {
+                        if (!mergedTodoTasks.find(t => t.title === existingTask.title)) {
+                          mergedTodoTasks.push(existingTask);
+                        }
+                      });
+                      
+                      existing.fanTasks.forEach(existingTask => {
+                        if (!mergedFanTasks.find(t => t.title === existingTask.title)) {
+                          mergedFanTasks.push(existingTask);
+                        }
+                      });
+                      
+                      // Conserver les statuts completed
+                      return {
+                        ...week,
+                        todoTasks: mergedTodoTasks.map(task => {
+                          const existingTask = existing.todoTasks.find(t => t.title === task.title);
+                          return existingTask ? {...task, completed: existingTask.completed} : task;
+                        }),
+                        fanTasks: mergedFanTasks.map(task => {
+                          const existingTask = existing.fanTasks.find(t => t.title === task.title);
+                          return existingTask ? {...task, completed: existingTask.completed} : task;
+                        })
+                      };
+                    }
+                    return week;
+                  });
+                  
+                 setWeeks(newWeeks);
+                  
+                  // IMPORTANT : Sauvegarder après la mise à jour
+                  setTimeout(() => {
+                    saveToLocalStorage();
+                  }, 100);
+                  
+                  alert('✅ Tâches actualisées !');
+                }
+              },
+              className: "hidden md:block fixed bottom-4 right-4 w-10 h-10 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 z-30",
+              style: {
+                background: 'rgba(0, 0, 0, 0.8)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255,255,255,0.2)'
+              },
+              title: "Actualiser les tâches"
+            },
+              React.createElement('img', {
+                src: "https://static.wixstatic.com/media/2a5453_0b8cbe8b4acb4148b542445e07fc7be4~mv2.png",
+                alt: "Actualiser",
+                className: "w-6 h-6 object-contain",
+                style: { margin: 'auto' }
+              })
+            ),
 // === MENU BURGER FLOTTANT MOBILE ===
             projectCode && React.createElement('div', { className: "md:hidden" },
               // Bouton burger principal
@@ -2181,6 +2566,18 @@ className: "fixed bottom-24 right-6 flex flex-col space-y-3 z-30 animate-in fade
     animation: showFloatingMenu ? 'slideInUp 0.3s ease-out forwards' : 'slideOutDown 0.3s ease-in forwards'
   }
 },
+// Bouton Recherche
+                React.createElement('button', {
+  onClick: () => {
+    setShowSearchModal(true);
+    setShowFloatingMenu(false);
+  },
+  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg border border-white flex items-center justify-center transition-all duration-300"
+}, React.createElement('img', {
+  src: "https://static.wixstatic.com/media/2a5453_e464b1ffcda4418b91507a753c278f6a~mv2.png",
+  alt: "Rechercher",
+  className: "h-5 w-5"
+})),
                 // Bouton Marty
                 React.createElement('button', {
   onClick: () => {
@@ -2244,7 +2641,46 @@ className: "fixed bottom-24 right-6 flex flex-col space-y-3 z-30 animate-in fade
   alt: "Nouveau",
   className: "h-5 w-5"
 })),
-
+// Bouton Refresh
+                React.createElement('button', {
+  onClick: () => {
+    setShowFloatingMenu(false);
+    if (confirm('🔄 Actualiser les tâches ?\n\n✅ Vos progrès seront conservés\n🔗 Les nouveaux liens seront ajoutés')) {
+      const progress = {};
+      weeks.forEach(week => {
+        [...(week.todoTasks || []), ...(week.fanTasks || [])].forEach(task => {
+          if (task.completed) progress[task.title] = true;
+        });
+      });
+      
+      const customWeeks = weeks.filter(w => w.isCustomWeek).map(w => ({
+        weekOffset: w.weekOffset, 
+        templateId: w.templateId, 
+        templateName: w.templateName
+      }));
+      
+      const newWeeks = generateWeeks(releaseDate, customWeeks).map(week => ({
+        ...week,
+        todoTasks: week.todoTasks.map(task => ({...task, completed: progress[task.title] || false})),
+        fanTasks: week.fanTasks.map(task => ({...task, completed: progress[task.title] || false}))
+      }));
+      
+    setWeeks(newWeeks);
+      
+      // IMPORTANT : Sauvegarder après la mise à jour
+      setTimeout(() => {
+        saveToLocalStorage();
+      }, 100);
+      
+      alert('✅ Tâches actualisées !');
+    }
+  },
+  className: "w-12 h-12 bg-black text-white rounded-full shadow-lg border border-white flex items-center justify-center transition-all duration-300"
+}, React.createElement('img', {
+  src: "https://static.wixstatic.com/media/2a5453_0b8cbe8b4acb4148b542445e07fc7be4~mv2.png",
+  alt: "Actualiser",
+  className: "h-5 w-5"
+})),
                 // Bouton Auto Scroll
                 React.createElement('button', {
                   onClick: () => {
@@ -2349,95 +2785,56 @@ React.createElement('img', {
                         className: "w-full px-3 py-2 border rounded text-sm"
                       })
                     ),
-                    React.createElement('div', { className: "grid grid-cols-2 gap-4" },
-                      React.createElement('div', null,
-                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Lien YouTube"),
-                        React.createElement('input', { 
-                          type: "text", 
-                          value: taskYouTube, 
-                          onChange: (e) => setTaskYouTube(e.target.value), 
-                          placeholder: "https://youtube.com/watch?v=...",
-                          className: "w-full px-3 py-2 border rounded text-sm"
-                        })
-                      ),
-                      React.createElement('div', null,
-                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Titre vidéo"),
-                        React.createElement('input', { 
-                          type: "text", 
-                          value: taskYouTubeTitle, 
-                          onChange: (e) => setTaskYouTubeTitle(e.target.value), 
-                          placeholder: "Ex: Mon nouveau clip",
-                          className: "w-full px-3 py-2 border rounded text-sm"
-                        })
-                      )
-                    ),
-                    React.createElement('div', { className: "grid grid-cols-2 gap-4" },
-                      React.createElement('div', null,
-                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Lien Instagram"),
-                        React.createElement('input', { 
-                          type: "text", 
-                          value: taskInstagram, 
-                          onChange: (e) => setTaskInstagram(e.target.value), 
-                          placeholder: "https://instagram.com/p/...",
-                          className: "w-full px-3 py-2 border rounded text-sm"
-                        })
-                      ),
-                      React.createElement('div', null,
-                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Titre post"),
-                        React.createElement('input', { 
-                          type: "text", 
-                          value: taskInstagramTitle, 
-                          onChange: (e) => setTaskInstagramTitle(e.target.value), 
-                          placeholder: "Ex: Behind the scenes",
-                          className: "w-full px-3 py-2 border rounded text-sm"
-                        })
-                      )
-                    ),
-                    React.createElement('div', { className: "grid grid-cols-2 gap-4" },
-                      React.createElement('div', null,
-                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Lien externe"),
-                        React.createElement('input', { 
-                          type: "text", 
-                          value: taskExternalUrl, 
-                          onChange: (e) => setTaskExternalUrl(e.target.value), 
-                          placeholder: "https://...",
-                          className: "w-full px-3 py-2 border rounded text-sm"
-                        })
-                      ),
-                      React.createElement('div', null,
-                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Texte bouton"),
-                        React.createElement('input', { 
-                          type: "text", 
-                          value: taskExternalButtonText, 
-                          onChange: (e) => setTaskExternalButtonText(e.target.value), 
-                          placeholder: "Ex: Voir le site",
-                          className: "w-full px-3 py-2 border rounded text-sm"
-                        })
-                      )
-                    ),
                     React.createElement('div', null,
-                      React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Fichiers"),
-                      React.createElement('button', { 
-                        onClick: () => fileInputRef.current && fileInputRef.current.click(), 
-                       className: "px-4 py-2 rounded text-sm hover:opacity-80 text-black font-mono",
-style: { backgroundColor: '#fffc00' }
-                      }, "Ajouter fichiers"),
-                      React.createElement('input', { 
-                        type: "file", 
-                        multiple: true, 
-                        ref: fileInputRef, 
-                        onChange: handleFileUpload, 
-                        className: "hidden"
-                      }),
-                      taskFiles.length > 0 && React.createElement('div', { className: "mt-2 space-y-1 max-h-16 overflow-y-auto" },
-                        taskFiles.map(f =>
-                          React.createElement('div', { key: f.id, className: "flex justify-between p-1 bg-gray-50 rounded text-xs" },
-                            React.createElement('span', { className: "truncate" }, f.name),
-                            React.createElement('span', { className: "text-gray-500" }, Math.round(f.size / 1024) + "KB")
+                      React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                        React.createElement('label', { className: "block text-sm font-medium" }, "Liens"),
+                        React.createElement('button', {
+                          type: "button",
+                          onClick: addNewLink,
+                          className: "px-3 py-1 text-xs rounded hover:opacity-80 text-black font-mono",
+                          style: { backgroundColor: '#fffc00' }
+                        }, "+ Ajouter un lien")
+                      ),
+                      React.createElement('div', { className: "space-y-3 max-h-40 overflow-y-auto" },
+                        taskLinks.map((link, index) =>
+                          React.createElement('div', { key: link.id, className: "border rounded p-3 bg-gray-50" },
+                            React.createElement('div', { className: "flex items-center justify-between mb-2" },
+                              React.createElement('select', {
+                                value: link.type,
+                                onChange: (e) => updateLink(link.id, 'type', e.target.value),
+                                className: "px-2 py-1 text-xs border rounded"
+                              },
+                                React.createElement('option', { value: "youtube" }, "🎬 YouTube"),
+                                React.createElement('option', { value: "instagram" }, "📸 Instagram"),
+                                React.createElement('option', { value: "externe" }, "🔗 Externe")
+                              ),
+                              React.createElement('button', {
+                                type: "button",
+                                onClick: () => removeLink(link.id),
+                                className: "text-red-500 hover:text-red-700 text-xs"
+                              }, "✕")
+                            ),
+                            React.createElement('div', { className: "grid grid-cols-2 gap-2" },
+                              React.createElement('input', {
+                                type: "text",
+                                value: link.url,
+                                onChange: (e) => updateLink(link.id, 'url', e.target.value),
+                                placeholder: "URL du lien",
+                                className: "px-2 py-1 text-xs border rounded"
+                              }),
+                              React.createElement('input', {
+                                type: "text",
+                                value: link.title,
+                                onChange: (e) => updateLink(link.id, 'title', e.target.value),
+                                placeholder: "Titre du lien",
+                                className: "px-2 py-1 text-xs border rounded"
+                              })
+                            )
                           )
-                        )
+                        ),
+                        taskLinks.length === 0 && React.createElement('p', { className: "text-gray-500 text-sm text-center py-4" }, "Aucun lien ajouté")
                       )
-                    )
+                    ),
                   )
                 ),
                 React.createElement('div', { className: "p-4 border-t flex justify-end" },
@@ -2474,47 +2871,56 @@ style: { backgroundColor: '#fffc00' }
                       style: { whiteSpace: 'pre-wrap' }
                     }, showTaskDetail.description)
                   ),
-                  showTaskDetail.youtubeUrl && React.createElement('div', null,
-                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "🎬 YouTube"),
-                    showTaskDetail.youtubeTitle && React.createElement('h4', { className: "font-medium text-gray-900 mb-2" }, showTaskDetail.youtubeTitle),
-                    React.createElement('a', { 
-                      href: showTaskDetail.youtubeUrl, 
-                      target: "_blank", 
-                      rel: "noopener noreferrer",
-                      className: "text-blue-600 hover:text-blue-800 underline break-all"
-                    }, showTaskDetail.youtubeUrl)
-                  ),
-                  showTaskDetail.instagramUrl && React.createElement('div', null,
-                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "📸 Instagram"),
-                    showTaskDetail.instagramTitle && React.createElement('h4', { className: "font-medium text-gray-900 mb-2" }, showTaskDetail.instagramTitle),
-                    React.createElement('a', { 
-                      href: showTaskDetail.instagramUrl, 
-                      target: "_blank", 
-                      rel: "noopener noreferrer",
-                      className: "text-blue-600 hover:text-blue-800 underline break-all"
-                    }, showTaskDetail.instagramUrl)
-                  ),
-                  showTaskDetail.externalUrl && React.createElement('div', null,
-                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, "🔗 Lien externe"),
-                    React.createElement('a', { 
-                      href: showTaskDetail.externalUrl, 
-                      target: "_blank", 
-                      rel: "noopener noreferrer",
-                     className: "inline-flex items-center px-3 py-2 rounded-lg hover:opacity-80 text-black font-mono",
-style: { backgroundColor: '#fffc00' }
-                    }, showTaskDetail.externalButtonText || 'Voir le lien')
-                  ),
-                  showTaskDetail.files && showTaskDetail.files.length > 0 && React.createElement('div', null,
-                    React.createElement('h3', { className: "font-semibold text-gray-700 mb-2" }, `📁 Fichiers (${showTaskDetail.files.length})`),
-                    React.createElement('div', { className: "space-y-2" },
-                      showTaskDetail.files.map(file =>
-                        React.createElement('div', { key: file.id, className: "flex justify-between p-2 bg-gray-50 rounded-lg" },
-                          React.createElement('span', { className: "text-sm truncate" }, file.name),
-                          React.createElement('span', { className: "text-xs text-gray-500" }, Math.round(file.size / 1024) + "KB")
-                        )
+                  (() => {
+                    const allLinks = [];
+                    
+                    if (showTaskDetail.links && showTaskDetail.links.length > 0) {
+                      allLinks.push(...showTaskDetail.links);
+                    } else {
+                      if (showTaskDetail.youtubeUrl) {
+                        allLinks.push({
+                          type: 'youtube',
+                          url: showTaskDetail.youtubeUrl,
+                          title: showTaskDetail.youtubeTitle || 'Vidéo YouTube'
+                        });
+                      }
+                      if (showTaskDetail.instagramUrl) {
+                        allLinks.push({
+                          type: 'instagram',
+                          url: showTaskDetail.instagramUrl,
+                          title: showTaskDetail.instagramTitle || 'Post Instagram'
+                        });
+                      }
+                      if (showTaskDetail.externalUrl) {
+                        allLinks.push({
+                          type: 'externe',
+                          url: showTaskDetail.externalUrl,
+                          title: showTaskDetail.externalButtonText || 'Lien externe'
+                        });
+                      }
+                    }
+                    
+                    return allLinks.length > 0 ? allLinks.map((link, index) =>
+                      React.createElement('div', { key: index, className: "mb-4" },
+                        React.createElement('h3', { 
+                          className: "font-semibold text-gray-700 mb-2" 
+                        }, 
+                          link.type === 'youtube' ? '🎬 YouTube' : 
+                          link.type === 'instagram' ? '📸 Instagram' : '🔗 Lien externe'
+                        ),
+                        link.title && React.createElement('h4', { 
+                          className: "font-medium text-gray-900 mb-2" 
+                        }, link.title),
+                        React.createElement('a', {
+                          href: link.url,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                          className: "inline-flex items-center px-4 py-2 rounded-lg transition-all duration-200 hover:opacity-80 text-black font-mono font-medium",
+                          style: { backgroundColor: '#fffc00' }
+                        }, "Ouvrir le lien")
                       )
-                    )
-                  )
+                    ) : null;
+                  })()
                 ),
              React.createElement('div', { className: "p-6 border-t flex justify-end" },
                   React.createElement('button', {
@@ -2558,6 +2964,103 @@ style: { backgroundColor: '#fffc00' }
                 )
               )
             ),
+// === MODAL RECHERCHE ===
+showSearchModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" },
+  React.createElement('div', { className: "bg-white rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col" },
+    React.createElement('div', { className: "p-4 border-b flex items-center space-x-3" },
+      React.createElement('img', {
+        src: "https://static.wixstatic.com/media/2a5453_e464b1ffcda4418b91507a753c278f6a~mv2.png",
+        alt: "Recherche",
+        className: "w-6 h-6"
+      }),
+      React.createElement('input', {
+        type: "text",
+        value: searchQuery,
+        onChange: handleSearchChange,
+        placeholder: "Rechercher une tâche...",
+     className: "flex-1 px-3 py-2 border-0 border-b-2 border-gray-300 focus:outline-none focus:border-gray-500 text-sm bg-transparent",
+        style: { fontFamily: 'Andale Mono, monospace' },
+        autoFocus: true
+      }),
+      React.createElement('button', {
+        onClick: () => {
+          setShowSearchModal(false);
+          setSearchQuery('');
+          setSearchResults([]);
+          setShowSearchResults(false);
+        },
+        className: "p-1 rounded hover:bg-gray-100"
+      }, React.createElement(X, { className: "w-5 h-5" }))
+    ),
+    React.createElement('div', { className: "flex-1 overflow-y-auto p-4" },
+      searchQuery && searchResults.length > 0 ? React.createElement('div', { className: "space-y-3" },
+        React.createElement('h3', { 
+          className: "font-bold text-gray-700 mb-3",
+          style: { fontFamily: 'Andale Mono, monospace' }
+        }, `${searchResults.length} résultat${searchResults.length > 1 ? 's' : ''} trouvé${searchResults.length > 1 ? 's' : ''}`),
+        searchResults.map((task, index) =>
+          React.createElement('div', { 
+            key: `${task.id}-${index}`,
+            className: "border rounded-lg p-4 hover:bg-yellow-50 hover:border-yellow-300 cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.01]",
+            style: {
+              background: task.completed ? 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' : 'white'
+            },
+            onClick: () => {
+              setShowSearchModal(false);
+              setSearchQuery('');
+              
+              // Surligner la tâche
+              setHighlightedTask(task.id);
+              
+              // Scroll vers la tâche
+              setTimeout(() => {
+                const weekElement = document.getElementById('week-' + task.weekId);
+                if (weekElement) {
+                  const headerHeight = 120;
+                  const elementTop = weekElement.offsetTop - headerHeight;
+                  
+                  window.scrollTo({
+                    top: elementTop,
+                    behavior: 'smooth'
+                  });
+                }
+              }, 100);
+              
+              // Retirer la surbrillance après 3 secondes
+              setTimeout(() => {
+                setHighlightedTask(null);
+              }, 3000);
+            }
+          },
+            React.createElement('div', { className: "flex items-center justify-between" },
+              React.createElement('div', null,
+                React.createElement('h3', { className: "font-medium text-gray-900" }, task.title),
+                React.createElement('p', { className: "text-sm text-gray-600 mt-1" }, task.weekTitle),
+                React.createElement('span', { 
+                  className: `inline-block px-2 py-1 text-xs rounded mt-2 ${
+                    task.taskType === 'todo' ? 'bg-pink-100 text-pink-800' : 'bg-purple-100 text-purple-800'
+                  }`
+                }, task.taskType === 'todo' ? '🚀 To do list' : '🤘 Le voyage du fan')
+              ),
+              React.createElement('div', { className: "text-right" },
+                React.createElement('span', { 
+                  className: `inline-block w-3 h-3 rounded-full ${task.completed ? 'bg-green-500' : 'bg-gray-300'}`
+                }),
+                React.createElement('p', { className: "text-xs text-gray-500 mt-1" }, 
+                  task.completed ? '✅ Terminée' : '⏳ En cours'
+                )
+              )
+            )
+          )
+        )
+      ) : searchQuery ? React.createElement('p', { className: "text-gray-500 text-center py-8" }, 
+        `Aucun résultat pour "${searchQuery}"`
+      ) : React.createElement('p', { className: "text-gray-400 text-center py-8" }, 
+        "Tapez pour rechercher dans vos tâches..."
+      )
+    )
+  )
+),
 // === MODAL VIDÉO TUTORIEL ===
 showVideoModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4" },
   React.createElement('div', { className: "relative w-full max-w-4xl" },
