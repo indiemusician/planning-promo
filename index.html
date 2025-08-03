@@ -2296,7 +2296,7 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
     }, getRandomEncouragementMessage(calculateWeekProgress(week)))
   ),
   // Bouton replay
-  React.createElement('button', {
+React.createElement('button', {
     onClick: () => {
       if (week.youtubeReplayUrl) {
         window.open(week.youtubeReplayUrl, '_blank');
@@ -2314,18 +2314,23 @@ React.createElement('div', { className: "bg-black shadow-sm border-b sticky top-
         setWeeks(updatedWeeks);
       }
     },
-    className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+    className: "flex items-center justify-center px-4 py-2 md:px-6 md:py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
     style: {
       fontFamily: 'Andale Mono, monospace',
-      fontSize: '14px',
+      fontSize: '11px',
       fontWeight: '500',
-      letterSpacing: '5px',
-      textTransform: 'uppercase'
+      letterSpacing: '3px',
+      textTransform: 'uppercase',
+      '@media (min-width: 768px)': {
+        fontSize: '14px',
+        letterSpacing: '5px'
+      }
     },
     title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
   },
     React.createElement('span', { 
-      style: { marginRight: '8px', fontSize: '16px' }
+      style: { marginRight: '6px', fontSize: '14px' },
+      className: "md:text-base"
     }, '▶'),
     React.createElement('span', null, 'LE REPLAY DU COURS')
   )
