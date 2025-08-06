@@ -779,7 +779,10 @@ const calculateWeekProgress = (week) => {
     title: 'Demander ton code ISRC',
     description: 'Le code ISRC, c\'est l\'empreinte digitale de ta chanson : il permet de l\'identifier et de te reverser les droits liés à son utilisation (radio, streaming, TV…). \n\nTu peux le prendre via ton distributeur, mais mieux vaut le créer toi-même via la SCPP : tu gardes ainsi la main sur tes droits et ta rémunération.',
     youtubeUrl: 'https://youtu.be/7gJhyMaQ7-0',
-    youtubeTitle: 'TUTO - Créer ton code ISRC avec la SCPP'
+    youtubeTitle: 'TUTO - Créer ton code ISRC avec la SCPP',
+    links: [
+      { type: 'youtube', url: 'https://youtu.be/7gJhyMaQ7-0', title: 'TUTO - Créer ton code ISRC avec la SCPP' }
+    ]
   },
   {
     title: 'Protéger ton titre à la Sacem ou sur MusicStart',
@@ -805,7 +808,7 @@ const calculateWeekProgress = (week) => {
   },
   {
     title: 'Pitcher ton titre auprès des curateurs de playlist Spotify',
-    description: '🎧 C\'EST QUOI ?\n\nLe pitch est un court texte (500 caractères max.) qui te permet de présenter ton titre aux curateurs de playlists Spotify, idéalement 3 à 4 semaines avant sa sortie officielle.\n\n⸻\n\n🖊️ COMMENT LE FAIRE ?\n\nSuis ces 3 étapes simples :\n1. Style musical : décris brièvement ton genre musical.\n2. Mood & émotions : exprime l\'ambiance ou l\'émotion principale.\n3. Contexte idéal : suggère un moment parfait pour écouter ton titre.'
+    description: '🎧 C’EST QUOI ?\n\nLe pitch est un court texte (500 caractères max.) qui te permet de présenter ton titre aux curateurs de playlists Spotify, idéalement 3 à 4 semaines avant sa sortie officielle.\n\n⸻\n\n🖊️ COMMENT LE FAIRE ?\n\nSuis ces 3 étapes simples :\n1. Style musical : décris brièvement ton genre musical.\n2. Mood & émotions : exprime l’ambiance ou l’émotion principale.\n3. Contexte idéal : suggère un moment parfait pour écouter ton titre.\n\n⸻\n\n💡 EXEMPLE :\n\n« Ravi de vous présenter “Vers l’Océan” (Parka & Velvet), morceau dream pop aux mélodies aériennes et mélancoliques. Idéal en voyage ou pour des moments de rêverie, il invite à l’évasion et la contemplation. »\n\n⸻\n\n🤖 PROMPT POUR CHAT GPT :\n\nTu peux utiliser ce prompt pour écrire ton pitch :\n\n« Aide-moi à rédiger un pitch Spotify (500 caractères max.) pour ce morceau :\n\n- Artiste & Titre : [ton nom d’artiste et titre]\n\n- Style musical : [genre musical]\n\n- Mood & Émotions : [ambiance, émotions transmises]\n\n- Contexte idéal d’écoute : [moment ou situation idéale pour écouter ta chanson] »\n\n-----------\n\nCOMMENT PITCHER TON TITRE ?\n\nRends toi sur ton compte Spotify For artist\n\n Pour proposer ton morceau aux curateurs de playlists sur Spotify for Artists, suis ces étapes :\n\n1.	Prépare ta sortie : Assure-toi que ton morceau est programmé pour une sortie future et que les informations ont été transmises à Spotify via ton distributeur.\n\n2.	Accède à Spotify for Artists : Connecte-toi à ton compte sur Spotify for Artists.\n\n3.	Navigue vers “Musique” > “À venir” : Dans le tableau de bord, clique sur l’onglet « Musique », puis sur « À venir ».\n\n4.	Sélectionne ton morceau : Si ton titre à venir est détecté, il apparaîtra dans cette section avec l’option « Proposer une chanson » à côté.\n\n5.	Soumets ton pitch : Clique sur « Proposer une chanson » et remplis les informations requises, notamment le genre, l’ambiance, les instruments utilisés, et rédige un pitch concis (500 caractères maximum) pour présenter ton morceau.\n\n⚠️ Remarques importantes :\n•	Délai de soumission : Il est recommandé de soumettre ton morceau au moins 1 mois  avant sa date de sortie pour que les curateurs aient le temps de l’écouter.  ￼\n\n•	Morceaux éligibles : Seuls les titres inédits peuvent être soumis. Une fois le morceau publié, il n’est plus possible de le proposer via cette fonctionnalité.'
   },
   {
     title: 'Prévoir un évènement de fin de promo',
@@ -1117,7 +1120,8 @@ const calculateWeekProgress = (week) => {
   instagramTitle: typeof task === 'string' ? '' : task.instagramTitle || '',
   externalUrl: typeof task === 'string' ? '' : task.externalUrl || '',
   externalButtonText: typeof task === 'string' ? '' : task.externalButtonText || '',
-  files: typeof task === 'string' ? [] : task.files || []
+  files: typeof task === 'string' ? [] : task.files || [],
+  links: typeof task === 'string' ? [] : task.links || []
 }));
           };
 
@@ -1176,7 +1180,8 @@ const calculateWeekProgress = (week) => {
     instagramTitle: task.instagramTitle || '',
     externalUrl: task.externalUrl || '',
     externalButtonText: task.externalButtonText || '',
-    files: []
+    files: [],
+    links: task.links || []
   }));
 };
 
@@ -1792,7 +1797,16 @@ toggleTaskCompleted(task.id, weekId, taskType);
                 onClick: (e) => { 
                   e.stopPropagation(); 
                   setOpenMobileMenu(null);
-                  setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType })); 
+               console.log('DEBUG - Task:', task);
+console.log('DEBUG - Task links:', task.links);
+const taskWithLinks = {
+  ...task,
+  weekId: weekId,
+  taskType: taskType,
+  links: task.links || []
+};
+console.log('DEBUG - TaskWithLinks:', taskWithLinks);
+setShowTaskDetail(taskWithLinks);
                 },
                 onTouchStart: (e) => {
                   e.target.startY = e.touches[0].clientY;
@@ -1805,7 +1819,16 @@ toggleTaskCompleted(task.id, weekId, taskType);
                   // Seulement si le mouvement est inférieur à 10px (pas un scroll)
                   if (diffY < 10) {
                     setOpenMobileMenu(null);
-                    setShowTaskDetail(Object.assign({}, task, { weekId: weekId, taskType: taskType }));
+                    console.log('DEBUG - Task:', task);
+console.log('DEBUG - Task links:', task.links);
+const taskWithLinks = {
+  ...task,
+  weekId: weekId,
+  taskType: taskType,
+  links: task.links || []
+};
+console.log('DEBUG - TaskWithLinks:', taskWithLinks);
+setShowTaskDetail(taskWithLinks);
                   }
                 }
          }, task.title),
@@ -2314,12 +2337,12 @@ React.createElement('button', {
         setWeeks(updatedWeeks);
       }
     },
-    className: "flex items-center justify-center px-4 py-2 md:px-6 md:py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+ className: "flex items-center justify-center px-2 py-1 md:px-6 md:py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
     style: {
       fontFamily: 'Andale Mono, monospace',
-      fontSize: '11px',
+      fontSize: '9px',
       fontWeight: '500',
-      letterSpacing: '3px',
+      letterSpacing: '1px',
       textTransform: 'uppercase',
       '@media (min-width: 768px)': {
         fontSize: '14px',
@@ -2329,7 +2352,7 @@ React.createElement('button', {
     title: "Clic gauche = ouvrir | Clic droit = éditer le lien"
   },
     React.createElement('span', { 
-      style: { marginRight: '6px', fontSize: '14px' },
+      style: { marginRight: '4px', fontSize: '12px' },
       className: "md:text-base"
     }, '▶'),
     React.createElement('span', null, 'LE REPLAY DU COURS')
@@ -2446,7 +2469,7 @@ React.createElement('span', {
         setWeeks(updatedWeeks);
       }
     },
-    className: "flex items-center justify-center px-6 py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
+className: "flex items-center justify-center px-4 py-2 md:px-6 md:py-3 bg-white border-2 border-black rounded-xl hover:bg-gray-50 transition-colors",
     style: {
       fontFamily: 'Andale Mono, monospace',
       fontSize: '14px',
@@ -2494,9 +2517,19 @@ React.createElement('span', {
                       const mergedTodoTasks = [...week.todoTasks];
                       const mergedFanTasks = [...week.fanTasks];
                       
-                      // Ajouter les tâches personnalisées qui ne sont pas dans le code
+                      // Ajouter les tâches personnalisées qui ne sont pas dans le code (avec détection des tâches modifiées)
                       existing.todoTasks.forEach(existingTask => {
-                        if (!mergedTodoTasks.find(t => t.title === existingTask.title)) {
+                        // Vérifier si c'est une tâche complètement nouvelle ou une version modifiée d'une tâche existante
+                        const isModifiedTask = mergedTodoTasks.some(t => {
+                          // Si 70% du titre original est contenu dans le titre modifié, c'est probablement une modification
+                          const originalWords = existingTask.title.toLowerCase().split(/\s+/);
+                          const modifiedTitle = t.title.toLowerCase();
+                          const matchingWords = originalWords.filter(word => word.length > 2 && modifiedTitle.includes(word));
+                          return matchingWords.length / originalWords.length >= 0.7;
+                        });
+                        
+                        // N'ajouter que si ce n'est ni un doublon exact ni une tâche modifiée
+                        if (!mergedTodoTasks.find(t => t.title === existingTask.title) && !isModifiedTask) {
                           mergedTodoTasks.push(existingTask);
                         }
                       });
@@ -2911,7 +2944,11 @@ style: { backgroundColor: '#fffc00' }
                           className: "font-semibold text-gray-700 mb-2" 
                         }, 
                           link.type === 'youtube' ? '🎬 YouTube' : 
-                          link.type === 'instagram' ? '📸 Instagram' : '🔗 Lien externe'
+                          link.type === 'instagram' ? '📸 Instagram' : 
+                          link.type.startsWith('video') ? '📹 Vidéo' : 
+                          link.type.startsWith('instagram') ? '📷 Instagram' : 
+                          link.type.startsWith('externe') ? '🔗 Lien externe' : 
+                          '🔗 Lien externe'
                         ),
                         link.title && React.createElement('h4', { 
                           className: "font-medium text-gray-900 mb-2" 
@@ -2970,8 +3007,8 @@ style: { backgroundColor: '#fffc00' }
               )
             ),
 // === MODAL RECHERCHE ===
-showSearchModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" },
-  React.createElement('div', { className: "bg-white rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col" },
+showSearchModal && React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start md:items-center justify-center p-4 pt-4 md:pt-4" },
+  React.createElement('div', { className: "bg-white rounded-lg w-full max-w-2xl max-h-[90vh] md:max-h-[80vh] flex flex-col mt-0 md:mt-0" },
     React.createElement('div', { className: "p-4 border-b flex items-center space-x-3" },
       React.createElement('img', {
         src: "https://static.wixstatic.com/media/2a5453_e464b1ffcda4418b91507a753c278f6a~mv2.png",
