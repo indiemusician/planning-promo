@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#101634">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Labo">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
 <title>Le Labo — maquettes de canapé</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -26,44 +32,35 @@
       <li><b>✨</b> Le labo te souffle des idées</li>
     </ul>
     <button id="openBtn" class="btn-big">Ouvrir le labo</button>
-    <p class="tiny">Avec des écouteurs filaires, c'est encore mieux.</p>
+    <p class="tiny">Astuce : dans Safari, Partager › « Sur l'écran d'accueil » pour l'avoir comme une vraie appli.<br>Avec des écouteurs filaires, c'est encore mieux.</p>
   </div>
 </div>
 
 <div id="app" hidden>
   <header class="top">
-    <div class="brand"><span>LABO</span><small>🧪</small></div>
-    <input id="projName" class="pname" maxlength="40" aria-label="Nom de la maquette">
+    <div class="brand">LABO<small>🧪</small></div>
+    <input id="projName" class="pname" maxlength="40" aria-label="Nom de la maquette" enterkeyhint="done">
     <button class="ic" id="undoBtn" aria-label="Annuler">↶</button>
     <button class="ic" id="menuBtn" aria-label="Menu">⋯</button>
   </header>
 
-  <section class="ideas">
-    <div class="sec-h"><h2>✨ Idées du labo</h2></div>
-    <div class="ideas-row" id="ideas"></div>
-  </section>
+  <div class="ideas-row" id="ideas"></div>
 
-  <section class="studio">
+  <main class="studio">
     <div class="studio-h">
       <button class="pill" id="bpmBtn">110 BPM</button>
-      <div class="len"><span>Mesures</span><button class="mini-r" id="barsMinus">−</button><b id="barsN">8</b><button class="mini-r" id="barsPlus">+</button></div>
+      <div class="len"><span>Mesures</span><button class="mini-r" id="barsMinus" aria-label="Moins de mesures">−</button><b id="barsN">8</b><button class="mini-r" id="barsPlus" aria-label="Plus de mesures">+</button></div>
     </div>
     <div class="tl-scroll" id="tl"><div class="tl-inner" id="tlInner"></div></div>
-    <p class="tl-hint" id="tlHint">Touche une mesure de batterie pour passer de <b>A</b> à <b>B</b>, <b>roulement</b> ou <b>silence</b>. Touche un bloc pour le boucler, le déplacer ou le transformer.</p>
-  </section>
+    <p class="tl-hint" id="tlHint">Touche une mesure de batterie : <b>A</b> → <b>B</b> → <b>roulement</b> → <b>silence</b>. Touche un bloc pour le boucler ou le transformer.</p>
+  </main>
 
-  <section class="adds">
-    <div class="sec-h"><h2>➕ Ajouter</h2></div>
-    <div class="add-grid" id="addGrid"></div>
-  </section>
-  <div class="spacer"></div>
-
-  <nav class="transport">
-    <button class="tbtn" id="homeBtn" aria-label="Revenir au début"><svg viewBox="0 0 24 24"><path d="M6 5h2.5v14H6zM20 5v14L9.5 12z" fill="currentColor"/></svg></button>
-    <button class="tbtn" id="loopBtn" aria-label="Boucle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></svg></button>
+  <nav class="dock">
+    <button class="dbtn" id="homeBtn" aria-label="Revenir au début"><svg viewBox="0 0 24 24"><path d="M6 5h2.5v14H6zM20 5v14L9.5 12z" fill="currentColor"/></svg><span>Début</span></button>
+    <button class="dbtn" id="loopBtn" aria-label="Boucle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></svg><span>Boucle</span></button>
     <button class="playbig" id="playBtn" aria-label="Lecture"><svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg><svg class="i-stop" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="currentColor"/></svg></button>
-    <button class="recbig" id="recBtn" aria-label="Enregistrer"><i></i></button>
-    <button class="tbtn" id="metroBtn" aria-label="Métronome"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M9 3h6l4 18H5zM12 15l5-9M7.5 15h9"/></svg></button>
+    <button class="dbtn rec" id="recBtn" aria-label="Enregistrer"><i></i><span>Enreg.</span></button>
+    <button class="dbtn" id="beatBtn" aria-label="Atelier batterie"><b>🥁</b><span>Batterie</span></button>
   </nav>
 </div>
 
@@ -78,7 +75,7 @@
 </div>
 
 <!-- feuille modale -->
-<div id="sheetWrap" hidden><div class="scrim" id="scrim"></div><div class="sheet" id="sheet"><div class="grab"></div><div class="sheet-body" id="sheetBody"></div></div></div>
+<div id="sheetWrap" hidden><div class="scrim" id="scrim"></div><div class="sheet" id="sheet"><div class="grabzone"><div class="grab"></div></div><div class="sheet-body" id="sheetBody"></div></div></div>
 <div id="busy" hidden><div class="busy-in"><div class="spin">🧪</div><b id="busyTxt">Le labo réfléchit…</b></div></div>
 <div id="toast" hidden></div>
 

@@ -166,10 +166,10 @@
   };
 
   /* voix -> notes prêtes à jouer */
-  DSP.voiceToNotes = function (x, sr, stepDur) {
+  DSP.voiceToNotes = function (x, sr, stepDur, forcedKey) {
     const pt = DSP.pitchTrack(x, sr); const raw = DSP.notesFromPitch(pt);
     if (!raw.length) return { notes: [], key: null };
-    const key = DSP.detectKey(raw);
+    const key = forcedKey || DSP.detectKey(raw);
     return { notes: DSP.quantizeNotes(raw, stepDur, key), key };
   };
 
@@ -229,6 +229,133 @@
     return out;
   };
   DSP.chordName = c => c ? DSP.NOTE_NAMES[c.root] + (c.minor ? 'm' : '') : '—';
+
+  /* ---------- écoute d'une prise instrumentale : attaques + harmonie ---------- */
+  /* attaques (flux spectral) : renvoie [{t, w}] avec w = force normalisée 0..1 */
+  DSP.onsets = function (x, sr) {
+    const N = 1024, H = 256, nF = Math.floor((x.length - N) / H); if (nF < 8) return [];
+    const win = new Float32Array(N); for (let i = 0; i < N; i++) win[i] = .5 - .5 * Math.cos(2 * Math.PI * i / N);
+    let prev = new Float32Array(N / 2); const flux = new Float32Array(nF);
+    const re = new Float32Array(N), im = new Float32Array(N);
+    const kMax = Math.min(N / 2, Math.floor(8000 / sr * N));
+    for (let f = 0; f < nF; f++) {
+      const o = f * H; for (let i = 0; i < N; i++) { re[i] = x[o + i] * win[i]; im[i] = 0; }
+      fft(re, im); let fl = 0; const cur = new Float32Array(N / 2);
+      for (let k = 1; k < kMax; k++) { const m = Math.log(1 + 100 * Math.sqrt(re[k] * re[k] + im[k] * im[k])); cur[k] = m; const d = m - prev[k]; if (d > 0) fl += d; }
+      flux[f] = fl; prev = cur;
+    }
+    const out = []; const W = 8; let last = -1e9, mx = 0;
+    for (let f = 1; f < nF - 1; f++) {
+      let s = 0, c = 0; for (let k = Math.max(0, f - W); k <= Math.min(nF - 1, f + W); k++) { s += flux[k]; c++; }
+      const thr = s / c * 1.35 + 1e-3;
+      if (flux[f] > thr && flux[f] >= flux[f - 1] && flux[f] >= flux[f + 1]) {
+        const t = f * H / sr; if (t - last < .07) { if (out.length && flux[f] > out[out.length - 1].w) out[out.length - 1].w = flux[f]; continue; }
+        out.push({ t: t + N / 2 / sr * .5, w: flux[f] }); last = t; if (flux[f] > mx) mx = flux[f];
+      }
+    }
+    out.forEach(o => o.w = mx ? o.w / mx : 0);
+    return out.filter(o => o.w > .12);
+  };
+
+  /* chroma par pics spectraux, avec chroma de basse séparé */
+  function chromaPeaks(x, sr, s0, s1) {
+    const N = sr > 30000 ? 8192 : 4096, H = N / 4; const ch = new Float32Array(12), bass = new Float32Array(12);
+    const win = new Float32Array(N); for (let i = 0; i < N; i++) win[i] = .5 - .5 * Math.cos(2 * Math.PI * i / N);
+    const re = new Float32Array(N), im = new Float32Array(N); let frames = 0;
+    let start = s0; if (s1 - s0 < N) start = Math.max(0, Math.floor((s0 + s1) / 2 - N / 2));
+    for (let s = start; s + N <= Math.max(s1, start + N) && s + N <= x.length && frames < 8; s += H, frames++) {
+      for (let i = 0; i < N; i++) { re[i] = x[s + i] * win[i]; im[i] = 0; }
+      fft(re, im);
+      const kLo = Math.floor(55 / sr * N), kHi = Math.min(N / 2 - 2, Math.ceil(2100 / sr * N));
+      const mag = new Float32Array(kHi + 2); let mx = 0;
+      for (let k = kLo - 1; k <= kHi + 1; k++) { mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]); if (mag[k] > mx) mx = mag[k]; }
+      if (mx < 1e-6) continue;
+      let low = -1;
+      for (let k = kLo; k <= kHi; k++) {
+        const m = mag[k]; if (m < mx * .03 || m < mag[k - 1] || m < mag[k + 1]) continue;
+        const a = mag[k - 1], b = m, c = mag[k + 1], den = a - 2 * b + c, d = den ? .5 * (a - c) / den : 0;
+        const f = (k + d) * sr / N, midi = 69 + 12 * Math.log2(f / 440), r = Math.round(midi);
+        const dev = Math.abs(midi - r); if (dev > .35) continue;
+        const w = Math.pow(m / mx, .6) * (1 - dev);
+        const pc = ((r % 12) + 12) % 12; ch[pc] += w;
+        if (low < 0 && f < 330 && m > mx * .18) { low = pc; bass[pc] += 1; }
+      }
+    }
+    return frames ? { ch, bass } : null;
+  }
+  const HARM = [[0, 1], [12, .6], [19, .35], [24, .25], [28, .15]];
+  const TEMPL = [];
+  for (let r = 0; r < 12; r++) for (const minor of [false, true]) {
+    const t = new Float32Array(12); [0, minor ? 3 : 4, 7].forEach((iv, j) => HARM.forEach(([h, w]) => { t[(r + iv + h) % 12] += w * (j === 0 ? 1.1 : 1); }));
+    let n = 0; for (let i = 0; i < 12; i++) n += t[i] * t[i]; n = Math.sqrt(n); for (let i = 0; i < 12; i++) t[i] /= n;
+    TEMPL.push({ root: r, minor, t });
+  }
+  function keyFromChroma(h) {
+    const corr = (prof, r) => { let mx = 0, my = 0; for (let i = 0; i < 12; i++) { mx += h[i]; my += prof[i]; } mx /= 12; my /= 12; let sxy = 0, sxx = 0, syy = 0; for (let i = 0; i < 12; i++) { const a = h[(i + r) % 12] - mx, b = prof[i] - my; sxy += a * b; sxx += a * a; syy += b * b; } return sxx > 0 ? sxy / Math.sqrt(sxx * syy) : 0; };
+    let best = { root: 0, minor: false, score: -2 };
+    for (let r = 0; r < 12; r++) { const a = corr(KMAJ, r), b = corr(KMIN, r); if (a > best.score) best = { root: r, minor: false, score: a }; if (b > best.score) best = { root: r, minor: true, score: b }; }
+    const steps = best.minor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
+    best.scale = steps.map(s => (s + best.root) % 12); best.name = DSP.NOTE_NAMES[best.root] + (best.minor ? ' mineur' : ' majeur');
+    return best;
+  }
+  DSP.keyFromChroma = keyFromChroma;
+  function diatonic(c, key) {
+    if (!key) return false; const sc = key.scale; if (sc.indexOf(c.root) < 0) return false;
+    const third = (c.root + (c.minor ? 3 : 4)) % 12, fifth = (c.root + 7) % 12; return sc.indexOf(third) >= 0 && sc.indexOf(fifth) >= 0;
+  }
+  /* accords temps par temps (Viterbi) + tonalité */
+  DSP.analyzeHarmony = function (x, sr, beatDur, nBeats) {
+    const obs = [], energies = []; const total = new Float32Array(12); let maxE = 0;
+    for (let b = 0; b < nBeats; b++) {
+      const s0 = Math.floor(b * beatDur * sr), s1 = Math.min(x.length, Math.floor((b + 1) * beatDur * sr));
+      let e = 0; for (let j = s0; j < s1; j += 4) e += x[j] * x[j]; e = Math.sqrt(e / Math.max(1, (s1 - s0) / 4)); energies.push(e); if (e > maxE) maxE = e;
+      const c = s1 - s0 > 1024 ? chromaPeaks(x, sr, s0, s1) : null; obs.push(c);
+      if (c) for (let i = 0; i < 12; i++) total[i] += c.ch[i];
+    }
+    const S = TEMPL.length; // + état « pas d'accord » = S
+    const run = (key) => {
+    const em = obs.map((o, b) => {
+      const sc = new Float32Array(S + 1);
+      const silent = !o || energies[b] < maxE * .1;
+      if (silent) { sc.fill(-.5); sc[S] = .5; return sc; }
+      let n = 0; const v = new Float32Array(12); for (let i = 0; i < 12; i++) { v[i] = Math.log(1 + 8 * o.ch[i]); n += v[i] * v[i]; } n = Math.sqrt(n) || 1;
+      let bn = 0; for (let i = 0; i < 12; i++) bn += o.bass[i]; const bassTop = bn > 0 ? o.bass.indexOf(Math.max(...o.bass)) : -1;
+      for (let j = 0; j < S; j++) {
+        const T = TEMPL[j]; let d = 0; for (let i = 0; i < 12; i++) d += v[i] / n * T.t[i];
+        if (bn > 0) { const br = o.bass[T.root] / bn; d += .12 * br; const b3 = o.bass[(T.root + (T.minor ? 3 : 4)) % 12] / bn; d += .03 * b3; }
+        if (key && diatonic(T, key)) d += .05;
+        sc[j] = d;
+      }
+      sc[S] = .2; return sc;
+    });
+    const change = .05, nS = S + 1; let prev = em[0] ? Array.from(em[0]) : new Array(nS).fill(0); const back = [];
+    for (let b = 1; b < em.length; b++) {
+      let bi = 0; for (let j = 1; j < nS; j++) if (prev[j] > prev[bi]) bi = j;
+      const cur = new Array(nS), bk = new Array(nS);
+      const pen = b % 4 === 0 ? change * .4 : b % 2 === 0 ? change * 1.4 : change * 3;
+      for (let j = 0; j < nS; j++) { const stay = prev[j], sw = prev[bi] - pen; if (stay >= sw) { cur[j] = stay + em[b][j]; bk[j] = j; } else { cur[j] = sw + em[b][j]; bk[j] = bi; } }
+      back.push(bk); prev = cur;
+    }
+    let st = 0; for (let j = 1; j < nS; j++) if (prev[j] > prev[st]) st = j;
+    const path = [st]; for (let b = back.length - 1; b >= 0; b--) { st = back[b][st]; path.unshift(st); }
+    return path.map(j => j === S ? null : { root: TEMPL[j].root, minor: TEMPL[j].minor });
+    };
+    const first = run(null);
+    /* tonalité = celle qui explique le plus d'accords entendus (+ bonus si le premier ou le dernier accord est la tonique) */
+    let key = null, ks = -1e9; const kc = keyFromChroma(total);
+    for (let r = 0; r < 12; r++) for (const minor of [false, true]) {
+      const steps = minor ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11]; const k = { root: r, minor, scale: steps.map(x => (x + r) % 12) };
+      let sc = 0; const got = first.filter(Boolean);
+      got.forEach(c => { if (diatonic(c, k)) sc += 1; });
+      if (got.length) { const f = got[0], l = got[got.length - 1]; if (f.root === r && f.minor === minor) sc += 1.5; if (l.root === r && l.minor === minor) sc += .5; }
+      if (got.some(c => c.root === r && c.minor === minor)) sc += 1;
+      if (kc.root === r && kc.minor === minor) sc += .3;
+      if (sc > ks) { ks = sc; key = k; }
+    }
+    key.name = DSP.NOTE_NAMES[key.root] + (key.minor ? ' mineur' : ' majeur');
+    const chords = run(key);
+    return { chords, key, energies };
+  };
 
   /* ---------- auto-tune (correction de hauteur granulaire) ---------- */
   DSP.autotune = function (x, sr, key) {
