@@ -96,6 +96,10 @@
   function applyTracks() { if (!E) return; E.clickMode = P.clickMode || 'clic'; const s = P.tracks.some(t => t.solo); P.tracks.forEach(t => E.applyTrack(t, s, P.bpm)); }
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
+  /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
+  const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
+  const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } };
+
   /* ---------- micro ---------- */
   /* Capture micro sur le fil audio (AudioWorklet) : pas de trous, horodatage exact à l'échantillon près.
      Le micro est relâché après chaque prise pour que le téléphone repasse en lecture haute qualité. */
@@ -108,7 +112,9 @@ registerProcessor('labo-cap',Cap);`;
     async ensure() {
       if (this.stream && this.stream.active && this.node) return true;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nomic');
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+      const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
+      try { this.stream = await navigator.mediaDevices.getUserMedia({ audio: DEV.micId ? { ...base, deviceId: { exact: DEV.micId } } : base }); }
+      catch (e) { if (!DEV.micId) throw e; DEV.micId = null; saveDev(); this.stream = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       if (AC.state !== 'running') { try { await AC.resume(); } catch (e) { } }
       this.src = AC.createMediaStreamSource(this.stream);
       this.an = AC.createAnalyser(); this.an.fftSize = 1024; this.src.connect(this.an);
@@ -463,14 +469,20 @@ registerProcessor('labo-cap',Cap);`;
     openSheet(`<div class="sh-t"><span class="em">${T.em}</span>${sing ? 'Chante → ' + T.name : T.name}</div><p class="sh-p">${desc}</p>
       <div class="blk"><label>Combien de temps ?</label><div class="chips" id="rsLen">${[[0, '∞ Libre'], [1, '1 mes.'], [2, '2'], [4, '4'], [8, '8'], [16, '16']].map(([v, l]) => `<button class="chip ${v === 0 ? 'on' : ''}" data-l="${v}">${l}</button>`).join('')}</div><p class="sh-p" id="rsLenTxt" style="font-size:13px;margin:10px 0 0"><b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.</p></div>
       <div class="blk"><div class="row"><span style="font-weight:700;font-size:14.5px">Ça démarre<small style="display:block;font-weight:500;font-size:12px;opacity:.65;margin-top:2px">Change-le pour ajouter une partie plus loin</small></span><div class="stepper" style="gap:8px"><button data-d="-1" style="width:36px;height:36px;font-size:18px">−</button><b id="rsBar" style="font-size:15px;min-width:76px"></b><button data-d="1" style="width:36px;height:36px;font-size:18px">+</button></div></div></div>
-      <div class="blk"><div class="tog"><span>🎧 J'ai des écouteurs filaires<small id="rsHpTxt"></small></span><span class="sw ${P.headphones ? 'on' : ''}" id="rsHp"></span></div></div>
+      <div class="blk"><div class="tog"><span>🎧 J'ai des écouteurs<small id="rsHpTxt"></small></span><span class="sw ${P.headphones ? 'on' : ''}" id="rsHp"></span></div>
+        <div id="rsSync" class="row" style="margin-top:4px"></div></div>
       <div class="blk">${clickChips()}<div class="tog" style="margin-top:6px">Décompte d'une mesure<span class="sw on" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
       <p class="sh-p" style="font-size:12.5px">Évite les écouteurs Bluetooth : dès que le micro s'ouvre, le téléphone les passe en qualité « appel » et le son se dégrade. Et ferme les autres applis qui enregistrent (dictaphone…).</p>
       <button class="btn red full" id="rsGo" style="font-family:Bungee;font-size:18px">● C'est parti</button>`, b => {
       const upd = () => b.querySelector('#rsBar').textContent = start === 0 ? 'au début' : 'mesure ' + (start + 1);
       upd(); b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { start = Math.max(0, Math.min(P.bars - 1, start + +x.dataset.d)); upd(); });
       b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { len = +x.dataset.l; b.querySelectorAll('[data-l]').forEach(y => y.classList.toggle('on', y === x)); b.querySelector('#rsLenTxt').innerHTML = len ? 'La prise s\'arrête toute seule après <b>' + len + ' mesure' + (len > 1 ? 's' : '') + '</b>, pile sur le temps. Pratique pour une boucle bien nette.' : '<b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.'; });
-      const hpTxt = () => b.querySelector('#rsHpTxt').textContent = P.headphones ? 'Tu entends toute la batterie pendant la prise.' : 'Sans écouteurs, la batterie du haut-parleur rentre dans le micro et se mélange à ta guitare (ça fait un son décalé). Pendant la prise tu entends donc juste un petit clic.';
+      const hpTxt = () => {
+        b.querySelector('#rsHpTxt').textContent = P.headphones ? 'Filaires ou Bluetooth : tu entends toute la batterie, le téléphone n\'enregistre que toi.' : 'Sans écouteurs, la batterie du haut-parleur rentre dans le micro et se mélange à ta guitare. Pendant la prise tu entends donc juste un petit clic.';
+        const sy = b.querySelector('#rsSync'); sy.hidden = !P.headphones;
+        sy.innerHTML = `<span style="font-size:13px;font-weight:700">⏱️ Synchro écouteurs : ${DEV.lat != null ? '<span style="color:var(--green)">' + Math.round(DEV.lat) + ' ms ✓</span>' : '<span style="color:var(--yellow)">pas encore réglée</span>'}</span><button class="btn yel" id="rsSyncBtn" style="padding:8px 12px;font-size:13px">${DEV.lat != null ? 'Refaire' : 'Régler'}</button>`;
+        sy.querySelector('#rsSyncBtn').onclick = () => openSyncSheet(() => openRecSheet(type));
+      };
       bindClickChips(b);
       hpTxt(); b.querySelector('#rsHp').onclick = e => { P.headphones = !P.headphones; e.target.classList.toggle('on', P.headphones); hpTxt(); save(); };
       b.querySelector('#rsCount').onclick = e => { countIn = !countIn; e.target.classList.toggle('on', countIn); };
@@ -500,7 +512,7 @@ registerProcessor('labo-cap',Cap);`;
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
-    const lat = (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006);
+    const lat = (P.headphones && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006);
     let s0 = Math.round((songStart - rec.t0 + lat) * sr);
     let x;
     if (s0 >= 0) x = rec.data.slice(s0); else { x = new Float32Array(rec.data.length - s0); x.set(rec.data, -s0); }
@@ -536,6 +548,66 @@ registerProcessor('labo-cap',Cap);`;
     P.clips.push({ id: uid(), kind: 'inst', trackId: t.id, bar, lenBars, loops: loops || 1, notes, src: audioId, key: r.key ? r.key.name : '' });
     commit(T.em + ' ' + T.name + ' : ' + notes.length + ' notes' + (r.key ? ' en ' + r.key.name : ''), true);
     return true;
+  }
+
+  /* ---------- synchro écouteurs ---------- */
+  function openSyncSheet(back) {
+    stop();
+    openSheet(`<div class="sh-t"><span class="em">⏱️</span>Synchro écouteurs</div>
+      <p class="sh-p">Les écouteurs (surtout en Bluetooth) ont un petit retard. Le labo le mesure une fois, puis recale toutes tes prises tout seul. À refaire si tu changes d'écouteurs.</p>
+      <div class="blk"><label>Micro qui enregistre</label><div class="chips" id="syMics"><span class="sh-p" style="margin:0;font-size:13px">Touche « Choisir » pour voir les micros.</span></div><button class="btn ghost full" id="syMicBtn" style="margin-top:8px">🎙️ Choisir le micro</button>
+        <p class="sh-p" style="font-size:12px;margin:8px 0 0">Prends le micro du téléphone : il enregistre bien mieux que celui des écouteurs. Selon le téléphone, les écouteurs Bluetooth peuvent quand même passer en qualité « appel » pendant la prise.</p></div>
+      <div class="blk"><label>Mesure précise (conseillée)</label><p class="sh-p" style="font-size:13px">Mets tes écouteurs, puis colle un écouteur contre le bas du téléphone, là où est le micro. Le labo joue 8 clics et chronomètre le temps qu'ils mettent à revenir.</p><button class="btn yel full" id="syLoop">🔁 Lancer la mesure</button></div>
+      <div class="blk"><label>Ou au rythme</label><p class="sh-p" style="font-size:13px">Écouteurs sur les oreilles : tape sur le bouton pile en même temps que chaque clic que tu entends (12 clics).</p><button class="btn full" id="syTap" style="height:84px;font-family:Bungee;font-size:18px">👆 Démarrer</button></div>
+      <div id="syOut"></div>
+      ${back ? '<button class="btn full" id="syBack">← Retour à l\'enregistrement</button>' : '<button class="btn full" data-close>OK</button>'}`, b => {
+      const out = b.querySelector('#syOut');
+      const done = (ms, how) => { DEV.lat = ms; DEV.latHow = how; saveDev(); out.innerHTML = `<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ Retard mesuré : ${Math.round(ms)} ms</b><br><span style="font-size:13px">Tes prises seront recalées automatiquement.</span></div>`; };
+      const fail = msg => { out.innerHTML = `<div class="blk"><b>😕 ${msg}</b></div>`; };
+      if (back) b.querySelector('#syBack').onclick = back;
+      b.querySelector('#syMicBtn').onclick = async () => {
+        if (!(await needMic())) return; Mic.release();
+        const list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+        const w = b.querySelector('#syMics'); w.innerHTML = '';
+        const opts = [{ deviceId: '', label: 'Automatique' }].concat(list.filter(d => d.deviceId && d.deviceId !== 'default'));
+        opts.forEach((d, i) => { const c = document.createElement('button'); c.className = 'chip' + ((DEV.micId || '') === d.deviceId ? ' on' : ''); c.textContent = d.label || ('Micro ' + i); c.onclick = () => { DEV.micId = d.deviceId || null; saveDev(); w.querySelectorAll('.chip').forEach(y => y.classList.toggle('on', y === c)); toast('🎙️ ' + c.textContent); }; w.appendChild(c); });
+      };
+      b.querySelector('#syLoop').onclick = async () => {
+        AC.resume(); if (!(await needMic())) return;
+        out.innerHTML = '<div class="blk"><b>🔁 Mesure en cours… ne bouge pas</b></div>';
+        Mic.start(); const t0 = AC.currentTime + .6, iv = .5, ticks = [];
+        for (let i = 0; i < 8; i++) { const t = t0 + i * iv; ticks.push(t); const o = AC.createOscillator(), g = AC.createGain(); o.type = 'square'; o.frequency.value = 1100; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.9, t + .001); g.gain.setValueAtTime(.9, t + .012); g.gain.linearRampToValueAtTime(0, t + .015); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + .03); }
+        await new Promise(r => setTimeout(r, (.6 + 8 * iv + .5) * 1000));
+        const rec = await Mic.stop(); const x = rec.data, sr = rec.sr; const lags = [];
+        let noise = 0; for (let i = 0; i < Math.min(x.length, Math.floor(sr * .3)); i++) noise = Math.max(noise, Math.abs(x[i]));
+        ticks.forEach(t => {
+          const a = Math.floor((t - rec.t0) * sr), z = Math.min(x.length, a + Math.floor(sr * .45)); if (a < 0 || a >= x.length) return;
+          let pk = 0; for (let i = a; i < z; i++) pk = Math.max(pk, Math.abs(x[i])); if (pk < noise * 3 || pk < .01) return;
+          let pre = 0; for (let i = Math.max(0, a - Math.floor(sr * .04)); i < a; i++) pre = Math.max(pre, Math.abs(x[i])); if (pre > pk * .3) return;
+          for (let i = a; i < z; i++) if (Math.abs(x[i]) > pk * .35) { lags.push((i - a) / sr * 1000); break; }
+        });
+        if (lags.length < 5) return fail('Je n\'ai pas entendu les clics. Monte le volume et colle bien l\'écouteur contre le micro du téléphone.');
+        const med = DSP.median(lags), spread = DSP.median(lags.map(l => Math.abs(l - med)));
+        if (spread > 25) return fail('Mesure pas assez stable (' + Math.round(spread) + ' ms d\'écart). Réessaie dans un coin calme.');
+        done(med, 'boucle');
+      };
+      b.querySelector('#syTap').onclick = e => {
+        AC.resume(); const btn = e.currentTarget; if (btn.dataset.on) return; btn.dataset.on = '1';
+        const t0 = AC.currentTime + .8, iv = .6, n = 12, ticks = [], taps = [];
+        for (let i = 0; i < n; i++) { ticks.push(t0 + i * iv); E.click(t0 + i * iv, i % 4 === 0); }
+        btn.textContent = '👆 TAPE ICI'; btn.style.background = 'var(--yellow)';
+        const onTap = ev => { ev.preventDefault(); taps.push(AC.currentTime); btn.animate([{ transform: 'scale(.96)' }, { transform: 'scale(1)' }], { duration: 120 }); };
+        btn.addEventListener('pointerdown', onTap);
+        setTimeout(() => {
+          btn.removeEventListener('pointerdown', onTap); delete btn.dataset.on; btn.textContent = '👆 Recommencer'; btn.style.background = '';
+          const d = taps.map(t => { let best = ticks[0]; ticks.forEach(k => { if (Math.abs(t - k) < Math.abs(t - best)) best = k; }); return (t - best) * 1000; }).slice(3).filter(v => v > -150 && v < 450);
+          if (d.length < 5) return fail('Pas assez de tapes. Tape bien sur chaque clic, du début à la fin.');
+          const med = DSP.median(d), spread = DSP.median(d.map(v => Math.abs(v - med)));
+          if (spread > 45) return fail('Tes tapes étaient un peu irrégulières, réessaie tranquillement.');
+          done(Math.max(0, med) + 15, 'rythme');
+        }, (.8 + n * iv + .4) * 1000);
+      };
+    });
   }
 
   /* ---------- feuille bloc ---------- */
@@ -706,8 +778,10 @@ registerProcessor('labo-cap',Cap);`;
       <div class="reclist">
         <button class="recitem" id="mExp"><span class="ae">💾</span><span><b>Exporter en WAV</b><small>Pour l'envoyer ou l'ouvrir dans ton logiciel</small></span></button>
         <button class="recitem" id="mNew"><span class="ae">✨</span><span><b>Nouvelle maquette</b><small>Repartir d'une page blanche</small></span></button>
+        <button class="recitem" id="mSync"><span class="ae">⏱️</span><span><b>Synchro écouteurs & micro</b><small>${DEV.lat != null ? 'Retard réglé : ' + Math.round(DEV.lat) + ' ms' : 'Pour jouer avec des écouteurs Bluetooth'}</small></span></button>
         <button class="recitem" id="mHelp"><span class="ae">💡</span><span><b>Comment ça marche</b><small>Le labo en 30 secondes</small></span></button>
       </div><div id="mOut"></div>`, b => {
+      b.querySelector('#mSync').onclick = () => openSyncSheet();
       b.querySelector('#mExp').onclick = () => exportWav(b.querySelector('#mOut'));
       b.querySelector('#mNew').onclick = () => { b.querySelector('#mOut').innerHTML = `<div class="blk"><p class="sh-p">Tout effacer et recommencer ? Ta maquette actuelle sera perdue (pense à l'exporter avant).</p><div class="row"><button class="btn ghost" data-close style="flex:1">Non</button><button class="btn red" id="mYes" style="flex:1">Oui, on repart</button></div></div>`; b.querySelector('[data-close]').onclick = closeSheet; b.querySelector('#mYes').onclick = () => { stop(); hist.length = 0; P = newProject(); for (const k in AUD) delete AUD[k]; DB.clear('audio'); E.chains = {}; rebuildEngine(); closeSheet(); renderAll(); save(); toast('✨ Nouvelle maquette'); }; };
       b.querySelector('#mHelp').onclick = () => { b.querySelector('#mOut').innerHTML = `<div class="blk sh-p" style="margin-bottom:0">1. <b>Atelier batterie</b> : chante ton rythme, le labo trouve le tempo.<br>2. <b>🔴</b> : enregistre ta guitare ou ta voix pendant que la batterie tourne.<br>3. Touche un bloc pour le <b>boucler</b> et l'allonger.<br>4. <b>Chante une basse ou un violon</b> : le labo transforme ta voix en instrument.<br>5. Les <b>idées ✨</b> en haut ajoutent roulements, basse auto, effets… et ↶ annule tout.<br>Ta maquette est gardée sur ce téléphone, même si tu fermes la page.</div>`; };
