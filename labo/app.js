@@ -93,7 +93,7 @@
     extend: () => { P.bars += 4; for (let i = 0; i < 4; i++) P.drumBars.push(P.drumBars[P.drumBars.length - 1] === 'F' ? 'A' : (P.drumBars[P.drumBars.length - 1] || 'A')); renderTimeline(); },
     onEnd: () => updatePlayBtn()
   };
-  function applyTracks() { if (!E) return; const s = P.tracks.some(t => t.solo); P.tracks.forEach(t => E.applyTrack(t, s, P.bpm)); }
+  function applyTracks() { if (!E) return; E.clickMode = P.clickMode || 'clic'; const s = P.tracks.some(t => t.solo); P.tracks.forEach(t => E.applyTrack(t, s, P.bpm)); }
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- micro ---------- */
@@ -463,12 +463,16 @@ registerProcessor('labo-cap',Cap);`;
     openSheet(`<div class="sh-t"><span class="em">${T.em}</span>${sing ? 'Chante → ' + T.name : T.name}</div><p class="sh-p">${desc}</p>
       <div class="blk"><label>Combien de temps ?</label><div class="chips" id="rsLen">${[[0, '∞ Libre'], [1, '1 mes.'], [2, '2'], [4, '4'], [8, '8'], [16, '16']].map(([v, l]) => `<button class="chip ${v === 0 ? 'on' : ''}" data-l="${v}">${l}</button>`).join('')}</div><p class="sh-p" id="rsLenTxt" style="font-size:13px;margin:10px 0 0"><b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.</p></div>
       <div class="blk"><div class="row"><span style="font-weight:700;font-size:14.5px">Ça démarre<small style="display:block;font-weight:500;font-size:12px;opacity:.65;margin-top:2px">Change-le pour ajouter une partie plus loin</small></span><div class="stepper" style="gap:8px"><button data-d="-1" style="width:36px;height:36px;font-size:18px">−</button><b id="rsBar" style="font-size:15px;min-width:76px"></b><button data-d="1" style="width:36px;height:36px;font-size:18px">+</button></div></div></div>
-      <div class="blk"><div class="tog">Décompte d'une mesure<span class="sw on" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
-      <p class="sh-p" style="font-size:12.5px">🎧 Avec des écouteurs filaires, la batterie ne s'entend pas dans ta prise. En Bluetooth, il y a du retard : tu pourras recaler la prise après.</p>
+      <div class="blk"><div class="tog"><span>🎧 J'ai des écouteurs filaires<small id="rsHpTxt"></small></span><span class="sw ${P.headphones ? 'on' : ''}" id="rsHp"></span></div></div>
+      <div class="blk">${clickChips()}<div class="tog" style="margin-top:6px">Décompte d'une mesure<span class="sw on" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
+      <p class="sh-p" style="font-size:12.5px">Évite les écouteurs Bluetooth : dès que le micro s'ouvre, le téléphone les passe en qualité « appel » et le son se dégrade. Et ferme les autres applis qui enregistrent (dictaphone…).</p>
       <button class="btn red full" id="rsGo" style="font-family:Bungee;font-size:18px">● C'est parti</button>`, b => {
       const upd = () => b.querySelector('#rsBar').textContent = start === 0 ? 'au début' : 'mesure ' + (start + 1);
       upd(); b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { start = Math.max(0, Math.min(P.bars - 1, start + +x.dataset.d)); upd(); });
       b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { len = +x.dataset.l; b.querySelectorAll('[data-l]').forEach(y => y.classList.toggle('on', y === x)); b.querySelector('#rsLenTxt').innerHTML = len ? 'La prise s\'arrête toute seule après <b>' + len + ' mesure' + (len > 1 ? 's' : '') + '</b>, pile sur le temps. Pratique pour une boucle bien nette.' : '<b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.'; });
+      const hpTxt = () => b.querySelector('#rsHpTxt').textContent = P.headphones ? 'Tu entends toute la batterie pendant la prise.' : 'Sans écouteurs, la batterie du haut-parleur rentre dans le micro et se mélange à ta guitare (ça fait un son décalé). Pendant la prise tu entends donc juste un petit clic.';
+      bindClickChips(b);
+      hpTxt(); b.querySelector('#rsHp').onclick = e => { P.headphones = !P.headphones; e.target.classList.toggle('on', P.headphones); hpTxt(); save(); };
       b.querySelector('#rsCount').onclick = e => { countIn = !countIn; e.target.classList.toggle('on', countIn); };
       b.querySelector('#rsMetro').onclick = e => { P.metroRec = !P.metroRec; e.target.classList.toggle('on', P.metroRec); save(); };
       b.querySelector('#rsGo').onclick = async () => { AC.resume(); if (!(await needMic())) return; closeSheet(); startRec(type, start, countIn, len); };
@@ -477,7 +481,7 @@ registerProcessor('labo-cap',Cap);`;
   function startRec(type, startBar, countIn, len) {
     stop(); keepAwake(true); Mic.start();
     if (len) while (P.bars < startBar + len) { P.bars++; P.drumBars.push('A'); }
-    player.start(startBar, { countIn, recording: true });
+    player.start(startBar, { countIn, recording: true, quiet: !P.headphones });
     recState = { type, startBar, countIn, len }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
   }
@@ -550,7 +554,7 @@ registerProcessor('labo-cap',Cap);`;
     if (isGtr) { let heard = ''; try { const L = listen(c); if (L) heard = `<p class="sh-p" style="font-size:13px;margin:0 0 10px">J'entends : <b>${chordLine(L).join(' · ') || '—'}</b>${L.key ? ' (' + L.key.name + ')' : ''}</p>`; } catch (e) { }
       h += `<div class="blk"><label>Le labo écrit pour toi</label>${heard}<div class="chips"><button class="chip" data-a="ab">🎸 Basse auto</button><button class="chip" data-a="as">🎼 Cordes auto</button><button class="chip" data-a="ad">🥁 Batterie calée</button></div></div>`; }
     if (c.kind === 'inst') h += `<div class="blk"><label>Octave${c.key ? ' · ' + c.key : ''}</label><div class="stepper"><button data-a="om">−</button><b id="csOct">${(c.oct || 0) > 0 ? '+' : ''}${c.oct || 0}</b><button data-a="op">+</button></div></div>`;
-    h += `<div class="row" style="margin-top:6px"><button class="btn ghost" data-a="dup" style="flex:1">⧉ Dupliquer après</button><button class="btn" data-a="pl" style="flex:1">▶ Écouter</button></div>`;
+    h += `<div class="row" style="margin-top:6px"><button class="btn ghost" data-a="dup" style="flex:1">⧉ Dupliquer après</button><button class="btn" data-a="pl" style="flex:1">▶ Écouter</button></div>` + (c.kind === 'audio' ? `<button class="btn ghost full" data-a="raw">🎧 Écouter la prise seule, sans rien</button>` : '');
     h += `<button class="danger" data-a="del">Supprimer ce bloc</button>`;
     openSheet(h, b => {
       const re = () => { renderTimeline(); save(); };
@@ -561,6 +565,7 @@ registerProcessor('labo-cap',Cap);`;
         if (a === 'om' || a === 'op') { snap(); c.oct = Math.max(-2, Math.min(2, (c.oct || 0) + (a === 'op' ? 1 : -1))); b.querySelector('#csOct').textContent = (c.oct > 0 ? '+' : '') + c.oct; re(); }
         if (a === 'dup') { snap(); const n = clone(c); n.id = uid(); n.bar = c.bar + c.lenBars * (c.loops || 1); const tt = trackFor(t.type, n.bar, n.lenBars * (n.loops || 1)); n.trackId = tt.id; P.clips.push(n); const need = n.bar + n.lenBars * (n.loops || 1); while (P.bars < need) { P.bars++; P.drumBars.push('A'); } closeSheet(); commit('⧉ Bloc dupliqué', true); }
         if (a === 'pl') { closeSheet(); play(c.bar); }
+        if (a === 'raw') { stop(); const bf = audioBuf(c.audioId); if (!bf) return; if (window._raw) { try { window._raw.stop(); } catch (e) { } } const src = AC.createBufferSource(); src.buffer = bf; src.connect(AC.destination); src.start(); window._raw = src; x.textContent = '■ Arrêter'; src.onended = () => { x.textContent = '🎧 Écouter la prise seule, sans rien'; }; x.onclick = () => { try { src.stop(); } catch (e) { } }; }
         if (a === 'del') { snap(); P.clips = P.clips.filter(x => x.id !== c.id); closeSheet(); commit('Bloc supprimé', true); }
         if (a === 'ab') { closeSheet(); autoBass(); }
         if (a === 'as') { closeSheet(); autoStrings(); }
@@ -677,18 +682,23 @@ registerProcessor('labo-cap',Cap);`;
     renderPGrid(); save(); preview();
   }
 
+  const CLICKS = [['clic', '🔔 Clic'], ['fr', '🗣️ « Un, deux, trois, quatre »'], ['en', '🇬🇧 « One, two, three, four »']];
+  function clickChips() { return `<label class="lbl" style="margin-top:4px">Le décompte et le métronome</label><div class="chips" data-clicks>${CLICKS.map(([k, l]) => `<button class="chip ${(P.clickMode || 'clic') === k ? 'on' : ''}" data-cm="${k}">${l}</button>`).join('')}</div>`; }
+  function bindClickChips(b) { b.querySelectorAll('[data-cm]').forEach(x => x.onclick = () => { P.clickMode = x.dataset.cm; E.clickMode = P.clickMode; b.querySelectorAll('[data-cm]').forEach(y => y.classList.toggle('on', y === x)); save(); const t = AC.currentTime + .05, beat = Math.min(.5, 60 / P.bpm); for (let i = 0; i < 4; i++) E.click(t + i * beat, i === 0, 1, i); }); }
   /* ---------- tempo & menu ---------- */
   $('bpmBtn').onclick = () => {
     const locked = P.clips.some(c => c.kind === 'audio'); let taps2 = [];
     openSheet(`<div class="sh-t"><span class="em">⏱️</span>Tempo</div>
       <div class="blk"><div class="stepper" style="justify-content:center"><button data-d="-1">−</button><b id="tpB" style="font-size:40px;min-width:110px">${Math.round(P.bpm)}</b><button data-d="1">+</button></div>
       <button class="btn yel full" id="tpTap">👆 Tape le tempo ici</button>${locked ? '<p class="sh-p" style="font-size:12.5px;margin:10px 0 0">⚠️ Tes prises audio ne suivent pas le tempo : si tu le changes, elles vont se décaler.</p>' : ''}</div>
+      <div class="blk">${clickChips()}</div>
       <div class="blk"><div class="tog">Métronome pendant la lecture<span class="sw ${P.metro ? 'on' : ''}" data-t="metro"></span></div><div class="tog">Métronome pendant les prises<span class="sw ${P.metroRec ? 'on' : ''}" data-t="metroRec"></span></div><div class="tog">Lecture en boucle<span class="sw ${P.loop ? 'on' : ''}" data-t="loop"></span></div></div>
       <button class="btn full" data-close>OK</button>`, b => {
       const upd = () => { b.querySelector('#tpB').textContent = Math.round(P.bpm); renderTimeline(); applyTracks(); save(); };
       b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { P.bpm = Math.max(50, Math.min(220, Math.round(P.bpm) + +x.dataset.d)); upd(); });
       b.querySelector('#tpTap').onclick = () => { const n = performance.now(); taps2 = taps2.filter(t => n - t < 2500); taps2.push(n); E.click(AC.currentTime + .005, taps2.length === 1); if (taps2.length >= 3) { const iv = []; for (let i = 1; i < taps2.length; i++) iv.push(taps2[i] - taps2[i - 1]); P.bpm = Math.round(60000 / DSP.median(iv)); upd(); } };
       b.querySelectorAll('[data-t]').forEach(x => x.onclick = () => { const k = x.dataset.t; P[k] = !P[k]; x.classList.toggle('on', P[k]); updatePlayBtn(); save(); });
+      bindClickChips(b);
     });
   };
   $('menuBtn').onclick = () => {
@@ -703,7 +713,7 @@ registerProcessor('labo-cap',Cap);`;
       b.querySelector('#mHelp').onclick = () => { b.querySelector('#mOut').innerHTML = `<div class="blk sh-p" style="margin-bottom:0">1. <b>Atelier batterie</b> : chante ton rythme, le labo trouve le tempo.<br>2. <b>🔴</b> : enregistre ta guitare ou ta voix pendant que la batterie tourne.<br>3. Touche un bloc pour le <b>boucler</b> et l'allonger.<br>4. <b>Chante une basse ou un violon</b> : le labo transforme ta voix en instrument.<br>5. Les <b>idées ✨</b> en haut ajoutent roulements, basse auto, effets… et ↶ annule tout.<br>Ta maquette est gardée sur ce téléphone, même si tu fermes la page.</div>`; };
     });
   };
-  function rebuildEngine() { E = new Labo.Engine(AC); E.setKit(P.kit); player = new Labo.Player(E, () => P, hooks); applyTracks(); }
+  function rebuildEngine() { E = new Labo.Engine(AC); E.setKit(P.kit); E.clickMode = P.clickMode || 'clic'; player = new Labo.Player(E, () => P, hooks); applyTracks(); }
   async function exportWav(out) {
     out.innerHTML = '<p class="sh-p" style="margin-top:12px">🧪 Mixage en cours…</p>';
     stop(); await new Promise(r => setTimeout(r, 30));

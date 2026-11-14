@@ -150,9 +150,16 @@
       [2, 3, 4.16, 5.43, 6.79, 8.21].forEach(r => { const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = 61 * r; o.connect(hp); o.start(t); o.stop(t + 1.6); });
       this.nz(t, 1.5).connect(hp); hp.connect(g); g.connect(this.drumIn); this.env(g, t, .32 * v, 1.5, .003);
     }
-    click(t, accent) {
+    countBufs(lang) {
+      if (!window.LABO_COUNTS || !LABO_COUNTS[lang]) return null; this._cb = this._cb || {};
+      if (!this._cb[lang]) { const L = LABO_COUNTS[lang]; this._cb[lang] = L.pcm.map(b64 => { const bin = atob(b64), n = bin.length >> 1, buf = this.ac.createBuffer(1, n, L.sr), d = buf.getChannelData(0); for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; d[i] = v / 32768; } return buf; }); }
+      return this._cb[lang];
+    }
+    click(t, accent, vol, n) {
+      const bufs = this.clickMode && this.clickMode !== 'clic' ? this.countBufs(this.clickMode) : null;
+      if (bufs) { const s = this.ac.createBufferSource(); s.buffer = bufs[((n || 0) % 4 + 4) % 4]; const g = this.ac.createGain(); g.gain.value = (vol == null ? 1 : vol) * (accent ? 1 : .8); s.connect(g); g.connect(this.out); s.start(Math.max(t, this.ac.currentTime)); return; }
       const ac = this.ac, o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = accent ? 1900 : 1250;
-      this.env(g, t, accent ? .35 : .22, .04); o.connect(g); g.connect(this.out); o.start(t); o.stop(t + .06);
+      this.env(g, t, (accent ? .35 : .22) * (vol == null ? 1 : vol), .04); o.connect(g); g.connect(this.out); o.start(t); o.stop(t + .06);
     }
     drum(row, t, v) {
       switch (row) {
@@ -203,7 +210,7 @@
       this.stop(true); opt = opt || {}; this.opt = opt; const ac = this.E.ac, p = this.get();
       this.fromBar = fromBar || 0; this.step = this.fromBar * 16; this.firstBar = true; this.endAt = 0;
       let t0 = ac.currentTime + .1;
-      if (opt.countIn) { const beat = this.stepDur() * 4; for (let i = 0; i < 4; i++) this.E.click(t0 + i * beat, i === 0); this.countInStart = t0; t0 += beat * 4; }
+      if (opt.countIn) { const beat = this.stepDur() * 4; for (let i = 0; i < 4; i++) this.E.click(t0 + i * beat, i === 0, 1, i); this.countInStart = t0; t0 += beat * 4; }
       this.songStart = t0; this.nextTime = t0; this.playing = true;
       const anySolo = p.tracks.some(t => t.solo); p.tracks.forEach(t => this.E.applyTrack(t, anySolo, p.bpm));
       this.tick(); this.timer = setInterval(() => this.tick(), 25);
@@ -226,7 +233,8 @@
       const E = this.E, st = s % 16;
       if (this.opt.preview) { const pat = p.patterns[this.opt.preview] || p.patterns.A; this.drums(p, pat, st, t, false); return; }
       const bar = Math.floor(s / 16);
-      if (!this.opt.export && (p.metro || (this.opt.recording && p.metroRec)) && st % 4 === 0) E.click(t, st === 0);
+      if (!this.opt.export && !this.opt.quiet && (p.metro || (this.opt.recording && p.metroRec)) && st % 4 === 0) E.click(t, st === 0, 1, st / 4);
+      if (this.opt.quiet) { if (st % 4 === 0) E.click(t, st === 0, .45, st / 4); return; }
       const v = p.drumBars[bar] || 'A';
       if (v !== '-') {
         const prev = bar > 0 ? p.drumBars[bar - 1] : null;
