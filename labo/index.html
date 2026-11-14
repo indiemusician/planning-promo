@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#101634">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Le Labo — maquettes de canapé</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bg"><i></i><i></i><i></i></div>
+
+<!-- écran d'accueil -->
+<div id="splash">
+  <div class="splash-in">
+    <div class="flask">🧪</div>
+    <h1 class="big"><span class="c1">LE</span> <span class="c2">LABO</span></h1>
+    <p class="sub">à maquettes de canapé</p>
+    <ul class="promise">
+      <li><b>🥁</b> Beatboxe ta batterie</li>
+      <li><b>🎸</b> Pose ta guitare et ta voix</li>
+      <li><b>🎻</b> Chante une basse, un violon…</li>
+      <li><b>✨</b> Le labo te souffle des idées</li>
+    </ul>
+    <button id="openBtn" class="btn-big">Ouvrir le labo</button>
+    <p class="tiny">Avec des écouteurs filaires, c'est encore mieux.</p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand"><span>LABO</span><small>🧪</small></div>
+    <input id="projName" class="pname" maxlength="40" aria-label="Nom de la maquette">
+    <button class="ic" id="undoBtn" aria-label="Annuler">↶</button>
+    <button class="ic" id="menuBtn" aria-label="Menu">⋯</button>
+  </header>
+
+  <section class="ideas">
+    <div class="sec-h"><h2>✨ Idées du labo</h2></div>
+    <div class="ideas-row" id="ideas"></div>
+  </section>
+
+  <section class="studio">
+    <div class="studio-h">
+      <button class="pill" id="bpmBtn">110 BPM</button>
+      <div class="len"><span>Mesures</span><button class="mini-r" id="barsMinus">−</button><b id="barsN">8</b><button class="mini-r" id="barsPlus">+</button></div>
+    </div>
+    <div class="tl-scroll" id="tl"><div class="tl-inner" id="tlInner"></div></div>
+    <p class="tl-hint" id="tlHint">Touche une mesure de batterie pour passer de <b>A</b> à <b>B</b>, <b>roulement</b> ou <b>silence</b>. Touche un bloc pour le boucler, le déplacer ou le transformer.</p>
+  </section>
+
+  <section class="adds">
+    <div class="sec-h"><h2>➕ Ajouter</h2></div>
+    <div class="add-grid" id="addGrid"></div>
+  </section>
+  <div class="spacer"></div>
+
+  <nav class="transport">
+    <button class="tbtn" id="homeBtn" aria-label="Revenir au début"><svg viewBox="0 0 24 24"><path d="M6 5h2.5v14H6zM20 5v14L9.5 12z" fill="currentColor"/></svg></button>
+    <button class="tbtn" id="loopBtn" aria-label="Boucle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></svg></button>
+    <button class="playbig" id="playBtn" aria-label="Lecture"><svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg><svg class="i-stop" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2" fill="currentColor"/></svg></button>
+    <button class="recbig" id="recBtn" aria-label="Enregistrer"><i></i></button>
+    <button class="tbtn" id="metroBtn" aria-label="Métronome"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M9 3h6l4 18H5zM12 15l5-9M7.5 15h9"/></svg></button>
+  </nav>
+</div>
+
+<!-- panneau d'enregistrement -->
+<div id="recPanel" hidden>
+  <div class="rp-in">
+    <div class="rp-count" id="rpCount">4</div>
+    <div class="rp-txt"><b id="rpTitle">Prépare-toi…</b><span id="rpSub">Le décompte démarre</span></div>
+    <div class="rp-meter"><i id="rpLevel"></i></div>
+    <div class="rp-btns"><button class="btn-ghost" id="rpCancel">Annuler</button><button class="btn-stop" id="rpStop">■ Stop</button></div>
+  </div>
+</div>
+
+<!-- feuille modale -->
+<div id="sheetWrap" hidden><div class="scrim" id="scrim"></div><div class="sheet" id="sheet"><div class="grab"></div><div class="sheet-body" id="sheetBody"></div></div></div>
+<div id="busy" hidden><div class="busy-in"><div class="spin">🧪</div><b id="busyTxt">Le labo réfléchit…</b></div></div>
+<div id="toast" hidden></div>
+
+<script src="dsp.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
