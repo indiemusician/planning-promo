@@ -97,9 +97,10 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 16;
+  const VERSION = 17;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
+  delete DEV.inLat; delete DEV.inHist;
   const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } DB.put('kv', 'device', DEV); };
 
   /* ---------- micro ---------- */
@@ -562,20 +563,19 @@ registerProcessor('labo-cap',Cap);`;
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
-    const lat = ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006)) + (DEV.inLat || 0);
+    const lat = ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006));
     /* on garde 0,5 s de marge avant le premier temps : rien n'est jamais mangé, le calage se fait sans couper */
-    const isAudio = TYPES[st.type].kind === 'audio', PRE = isAudio ? .5 : 0;
+    const isAudio = TYPES[st.type].kind === 'audio', PRE = isAudio ? 1 : 0;
     let s0 = Math.round((songStart - rec.t0 + lat - PRE) * sr);
     let x;
     if (s0 >= 0) x = rec.data.slice(s0); else { x = new Float32Array(rec.data.length - s0); x.set(rec.data, -s0); }
-    let pre = PRE, alignMsg = '';
+    let pre = PRE, alignMsg = '', lead = 0;
     if (isAudio && P.autoAlign !== false) {
-      const al = DSP.alignToGrid(x, sr, stepDur() * 4, 8, -.35, PRE);
-      if (al && Math.abs(al.d) > .025 && al.gain > 1.2) {
-        pre = Math.max(0, PRE + al.d);
-        DEV.inHist = (DEV.inHist || []).concat([(DEV.inLat || 0) + al.d]).slice(-5); DEV.inLat = Math.max(-.2, Math.min(.6, DSP.median(DEV.inHist))); saveDev();
-        alignMsg = ' · recalée de ' + Math.round(al.d * 1000) + ' ms';
-      }
+      const al = DSP.alignToGrid(x, sr, stepDur() * 4, 8, -.3, PRE);
+      if (al && Math.abs(al.d) > .025 && al.gain > 1.2) { pre = Math.max(0, PRE + al.d); alignMsg = ' · recalée de ' + Math.round(al.d * 1000) + ' ms'; }
+      /* garde-fou : la première note jouée n'est jamais coupée */
+      const on = DSP.onsets(x.subarray(0, Math.min(x.length, Math.floor((PRE + 3) * sr))), sr).filter(o => o.w > .25 && o.t > PRE - .3);
+      if (on.length && on[0].t - .02 < pre) lead = Math.min(.5, pre - Math.max(0, on[0].t - .02));
     }
     const dur = x.length / sr - pre;
     if (dur < .6) { toast('Prise trop courte, réessaie'); renderTimeline(); return; }
@@ -590,7 +590,7 @@ registerProcessor('labo-cap',Cap);`;
     if (T.kind === 'audio') {
       let tid = null; if (st.replace) { const old = P.clips.find(c => c.id === st.replace); if (old) { tid = old.trackId; P.clips = P.clips.filter(c => c.id !== old.id); } }
       const t = tid ? P.tracks.find(x => x.id === tid) : trackFor(st.type, st.startBar, lenBars);
-      P.clips.push({ id: uid(), kind: 'audio', trackId: t.id, bar: st.startBar, lenBars, loops: 1, audioId, nudge: 0, pre: +pre.toFixed(4) });
+      P.clips.push({ id: uid(), kind: 'audio', trackId: t.id, bar: st.startBar, lenBars, loops: 1, audioId, nudge: 0, pre: +pre.toFixed(4), lead: +lead.toFixed(4) });
       P.lastRec = { type: st.type, bar: st.startBar, clip: P.clips[P.clips.length - 1].id };
       commit(T.em + ' ' + T.name + ' enregistrée · ' + lenBars + ' mesure' + (lenBars > 1 ? 's' : '') + alignMsg + (st.type === 'voix' ? ' · écho malin activé' : '') + ' · appui long pour l\'éditer', true);
       if (P.tracks.find(t => t.id === P.clips[P.clips.length - 1].trackId).fx.autotune) tunedBuf(audioId);
@@ -990,7 +990,7 @@ registerProcessor('labo-cap',Cap);`;
             wd.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 160 });
           }
           if (now < endAt) { requestAnimationFrame(tick); return; }
-          Mic.stop().then(r => { busyRec = false; recBtn.disabled = false; recBtn.style.opacity = 1; recBtn.textContent = '● Recommencer'; big.style.display = 'none'; done(splitCount(r.data, r.sr) || beatSplit(r.data, r.sr, beat, beat - .14 + (DEV.inLat || 0)), r.sr); });
+          Mic.stop().then(r => { busyRec = false; recBtn.disabled = false; recBtn.style.opacity = 1; recBtn.textContent = '● Recommencer'; big.style.display = 'none'; done(splitCount(r.data, r.sr) || beatSplit(r.data, r.sr, beat, beat - .14), r.sr); });
         };
         if (k0()) requestAnimationFrame(tick);
         function k0() { ph.textContent = 'Prépare-toi…'; wd.textContent = ''; return true; }

@@ -212,7 +212,7 @@
       this.fromBar = fromBar || 0; this.step = this.fromBar * 16; this.firstBar = true; this.endAt = 0;
       let t0 = ac.currentTime + .1;
       if (opt.countIn) { const beat = this.stepDur() * 4; for (let i = 0; i < 4; i++) this.E.click(t0 + i * beat, i === 0, 1, i); this.countInStart = t0; t0 += beat * 4; }
-      this.songStart = t0; this.nextTime = t0; this.playing = true;
+      this.songStart = t0; this.nextTime = t0; this.playing = true; this.early = new Set();
       const anySolo = p.tracks.some(t => t.solo); p.tracks.forEach(t => this.E.applyTrack(t, anySolo, p.bpm));
       this.tick(); this.timer = setInterval(() => this.tick(), 25);
     }
@@ -227,6 +227,13 @@
           else if (p.loop) { this.step = (p.loopFrom || 0) * 16; }
           else this.endAt = this.nextTime;
         }
+      }
+      /* les blocs qui démarrent un poil avant la mesure (première note gardée) sont programmés plus tôt */
+      if (!this.opt.preview && !this.endAt && this.step % 16 !== 0) {
+        const toBar = 16 - (this.step % 16), bt = this.nextTime + toBar * this.stepDur(); let b = (this.step + toBar) / 16;
+        if (b >= p.bars) b = (p.loop && !this.opt.recording) ? (p.loopFrom || 0) : -1;
+        const key = Math.round(bt * 100);
+        if (b >= 0 && bt - .6 < ac.currentTime + .15 && !this.early.has(key)) { this.early.add(key); this.bar(p, b, bt, false); }
       }
       if (this.endAt && ac.currentTime > this.endAt + .2) { this.stop(); if (this.h.onEnd) this.h.onEnd(); }
     }
@@ -243,7 +250,7 @@
         const pat = v === 'F' ? makeFill(p.patterns.A, bar) : (p.patterns[v] || p.patterns.A);
         this.drums(p, pat, st, t, v === 'F');
       }
-      if (st === 0) { this.bar(p, bar, t, this.firstBar && bar === this.fromBar); this.firstBar = false; }
+      if (st === 0) { if (!this.early || !this.early.has(Math.round(t * 100))) this.bar(p, bar, t, this.firstBar && bar === this.fromBar); this.firstBar = false; }
     }
     drums(p, pat, st, t, fill) {
       const tt = st % 2 === 1 ? t + (p.swing || 0) / 100 * this.stepDur() * .66 : t;
@@ -271,9 +278,10 @@
         const cin = (c.pre || 0) + (c.inBars || 0) * this.barDur();
         let when = t + (c.nudge || 0) / 1000, off = offset;
         if (when < t && offset === 0) { off += t - when; when = t; }
-        if (when < ac.currentTime) { off += ac.currentTime - when; when = ac.currentTime; }
+        let lead = 0; if (offset === 0 && c.lead > 0 && !(c.trimA > 0) && !(c.inBars > 0)) { lead = Math.min(c.lead, cin + off); when -= lead; off -= lead; }
+        if (when < ac.currentTime) { off += ac.currentTime - when; lead = Math.max(0, lead - (ac.currentTime - when)); when = ac.currentTime; }
         if (cin + off < 0) { when -= cin + off; off = -cin; }
-        const dur = Math.min(buf.duration - cin - off, rep - offset); if (dur <= .02) return;
+        const dur = Math.min(buf.duration - cin - off, rep - offset + lead); if (dur <= .02) return;
         const s = ac.createBufferSource(); s.buffer = buf; const g = ac.createGain(); const gv = c.gain == null ? 1 : c.gain; g.gain.value = gv;
         const beat = this.barDur() / 4;
         Labo.allMutes(c).forEach(([a, b]) => {
