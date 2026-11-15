@@ -484,7 +484,11 @@ registerProcessor('labo-cap',Cap);`;
     openSheet(`<div class="sh-t"><span class="em">${T.em}</span>${sing ? 'Chante → ' + T.name : T.name}</div><p class="sh-p">${desc}</p>
       <div class="blk"><label>Combien de temps ?</label><div class="chips" id="rsLen">${[[0, '∞ Libre'], [1, '1 mes.'], [2, '2'], [4, '4'], [8, '8'], [16, '16']].map(([v, l]) => `<button class="chip ${v === 0 ? 'on' : ''}" data-l="${v}">${l}</button>`).join('')}</div><p class="sh-p" id="rsLenTxt" style="font-size:13px;margin:10px 0 0"><b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.</p></div>
       <div class="blk"><div class="row"><span style="font-weight:700;font-size:14.5px">Ça démarre<small style="display:block;font-weight:500;font-size:12px;opacity:.65;margin-top:2px">Change-le pour ajouter une partie plus loin</small></span><div class="stepper" style="gap:8px"><button data-d="-1" style="width:36px;height:36px;font-size:18px">−</button><b id="rsBar" style="font-size:15px;min-width:76px"></b><button data-d="1" style="width:36px;height:36px;font-size:18px">+</button></div></div></div>
-      <div class="blk"><div class="tog"><span>🎧 J'ai des écouteurs<small id="rsHpTxt"></small></span><span class="sw ${P.headphones ? 'on' : ''}" id="rsHp"></span></div>
+      <div class="blk"><label>Pendant la prise, j'entends…</label><div class="reclist" id="rsMode">
+        <button class="recitem" data-m="hp"><span class="ae">🎧</span><span><b>Toute la batterie dans mes écouteurs</b><small>Filaires ou Bluetooth. Le son le plus propre.</small></span></button>
+        <button class="recitem" data-m="soft"><span class="ae">🔈</span><span><b>La batterie, doucement, sur le haut-parleur</b><small>Pour jouer en rythme sans écouteurs. Un peu de batterie passera dans ta prise.</small></span></button>
+        <button class="recitem" data-m="click"><span class="ae">🔔</span><span><b>Juste le clic</b><small>Sans écouteurs, la prise la plus propre.</small></span></button>
+      </div>
         <div id="rsSync" class="row" style="margin-top:4px"></div></div>
       <div class="blk">${clickChips()}<div class="tog" style="margin-top:6px">Décompte d'une mesure<span class="sw on" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
       <p class="sh-p" style="font-size:12.5px">Évite les écouteurs Bluetooth : dès que le micro s'ouvre, le téléphone les passe en qualité « appel » et le son se dégrade. Et ferme les autres applis qui enregistrent (dictaphone…).</p>
@@ -493,13 +497,14 @@ registerProcessor('labo-cap',Cap);`;
       upd(); b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { start = Math.max(0, Math.min(P.bars - 1, start + +x.dataset.d)); upd(); });
       b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { len = +x.dataset.l; b.querySelectorAll('[data-l]').forEach(y => y.classList.toggle('on', y === x)); b.querySelector('#rsLenTxt').innerHTML = len ? 'La prise s\'arrête toute seule après <b>' + len + ' mesure' + (len > 1 ? 's' : '') + '</b>, pile sur le temps. Pratique pour une boucle bien nette.' : '<b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.'; });
       const hpTxt = () => {
-        b.querySelector('#rsHpTxt').textContent = P.headphones ? 'Filaires ou Bluetooth : tu entends toute la batterie, le téléphone n\'enregistre que toi.' : 'Sans écouteurs, la batterie du haut-parleur rentre dans le micro et se mélange à ta guitare. Pendant la prise tu entends donc juste un petit clic.';
+        P.recMode = P.recMode || (P.headphones ? 'hp' : 'soft'); P.headphones = P.recMode === 'hp';
+        b.querySelectorAll('[data-m]').forEach(x => { const on = x.dataset.m === P.recMode; x.style.background = on ? 'var(--yellow)' : ''; x.style.color = on ? 'var(--ink)' : ''; x.style.borderColor = on ? 'var(--ink)' : ''; });
         const sy = b.querySelector('#rsSync'); sy.hidden = !P.headphones;
         sy.innerHTML = `<span style="font-size:13px;font-weight:700">⏱️ Synchro écouteurs : ${DEV.lat != null ? '<span style="color:var(--green)">' + Math.round(DEV.lat) + ' ms ✓</span>' : '<span style="color:var(--yellow)">pas encore réglée</span>'}</span><button class="btn yel" id="rsSyncBtn" style="padding:8px 12px;font-size:13px">${DEV.lat != null ? 'Refaire' : 'Régler'}</button>`;
         sy.querySelector('#rsSyncBtn').onclick = () => openSyncSheet(() => openRecSheet(type));
       };
       bindClickChips(b);
-      hpTxt(); b.querySelector('#rsHp').onclick = e => { P.headphones = !P.headphones; e.target.classList.toggle('on', P.headphones); hpTxt(); save(); };
+      hpTxt(); b.querySelectorAll('[data-m]').forEach(x => x.onclick = () => { P.recMode = x.dataset.m; hpTxt(); save(); });
       b.querySelector('#rsCount').onclick = e => { countIn = !countIn; e.target.classList.toggle('on', countIn); };
       b.querySelector('#rsMetro').onclick = e => { P.metroRec = !P.metroRec; e.target.classList.toggle('on', P.metroRec); save(); };
       b.querySelector('#rsGo').onclick = async () => { AC.resume(); if (!(await needMic())) return; closeSheet(); startRec(type, start, countIn, len); };
@@ -508,7 +513,9 @@ registerProcessor('labo-cap',Cap);`;
   function startRec(type, startBar, countIn, len) {
     stop(); keepAwake(true); Mic.start();
     if (len) while (P.bars < startBar + len) { P.bars++; P.drumBars.push('A'); }
-    player.start(startBar, { countIn, recording: true, quiet: !P.headphones });
+    const mode = P.recMode || (P.headphones ? 'hp' : 'soft');
+    if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
+    player.start(startBar, { countIn, recording: true, quiet: mode === 'click' });
     recState = { type, startBar, countIn, len }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
   }
@@ -522,12 +529,13 @@ registerProcessor('labo-cap',Cap);`;
     const lv = Mic.level(), hot = Mic.peak > .95; const m = $('rpLevel'); m.style.width = Math.min(100, Math.sqrt(lv) * 160) + '%'; m.classList.toggle('hot', hot);
     if (hot && now >= s) $('rpSub').textContent = '⚠️ Trop fort, recule un peu';
   }
-  $('rpCancel').onclick = () => { if (!recState) return; player.stop(); Mic.stop(); keepAwake(false); recState = null; $('recPanel').hidden = true; updatePlayBtn(); renderTimeline(); toast('Prise annulée'); };
+  const restoreVol = () => E.master.gain.setTargetAtTime(.9, AC.currentTime, .05);
+  $('rpCancel').onclick = () => { if (!recState) return; player.stop(); restoreVol(); Mic.stop(); keepAwake(false); recState = null; $('recPanel').hidden = true; updatePlayBtn(); renderTimeline(); toast('Prise annulée'); };
   $('rpStop').onclick = async () => {
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
-    const songStart = player.songStart; player.stop(); updatePlayBtn(); keepAwake(false);
+    const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
-    const lat = (P.headphones && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006);
+    const lat = (P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006);
     let s0 = Math.round((songStart - rec.t0 + lat) * sr);
     let x;
     if (s0 >= 0) x = rec.data.slice(s0); else { x = new Float32Array(rec.data.length - s0); x.set(rec.data, -s0); }
