@@ -245,7 +245,14 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .lane.add{height:52px;background:repeating-linear-gradient(90deg,transparent 0 calc(var(--bw) - 1px),rgba(246,236,214,.06) calc(var(--bw) - 1px) var(--bw));opacity:.6}
 .addtr .newtr .tn{white-space:normal;line-height:1.15;font-size:12px}
 @keyframes nudge{0%,100%{transform:none}25%{transform:translateY(-6px)}55%{transform:translateY(3px)}}
-.reclist.nudge .recitem:not([data-redo]){animation:nudge .5s ease 2;border-color:var(--yellow)}
+.reclist.nudge .recitem:not([data-redo]){animation:nudge .5s ease 2}
 #recPanel.practice .rp-in{background:var(--cyan);color:var(--ink);border-color:var(--ink)}
 #recPanel.practice .rp-in .btn-ghost{color:var(--ink);border-color:var(--ink)}
 #recPanel.practice .btn-stop{background:var(--red);color:var(--cream)}
+.practice-btn{display:flex;align-items:center;background:var(--cyan);color:var(--ink);border:2.5px solid var(--ink);flex-direction:column;gap:2px;padding:12px;font-size:17px}
+.practice-btn small{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;opacity:.8;text-transform:none}
+.rc-sep{display:flex;align-items:center;gap:10px;margin:16px 0 10px;font-family:'Bungee';font-size:13px;color:var(--red)}
+.rc-sep::before,.rc-sep::after{content:'';flex:1;height:2px;background:rgba(246,236,214,.18)}
+.tabs.small button{font-size:12.5px;padding:9px 6px}
+.btn.practice-btn{display:flex !important;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.btn.practice-btn small{display:block;margin-top:2px}

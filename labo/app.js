@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 30;
+  const VERSION = 31;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -529,24 +529,25 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     const cur = P.recMode || 'soft';
     let h = `<div class="sh-t"><span class="em">${forceFresh ? '➕' : '🔴'}</span>${forceFresh ? 'Nouvelle piste : quel instrument ?' : 'On enregistre quoi ?'}</div>
       <div class="tabs" id="rcMode" style="margin-bottom:8px"><button data-rm="hp" class="${cur === 'hp' ? 'on' : ''}">🎧 Écouteurs</button><button data-rm="soft" class="${cur === 'soft' ? 'on' : ''}">🔈 Haut-parleur</button><button data-rm="click" class="${cur === 'click' ? 'on' : ''}">🔔 Clic</button></div>
-      <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:8px"></p>
-      <div class="tabs" id="rcFresh" style="margin-bottom:6px"><button data-f="0" class="${P.recFresh ? '' : 'on'}">↪ Même piste</button><button data-f="1" class="${P.recFresh ? 'on' : ''}">➕ Nouvelle piste</button></div>
-      <p class="sh-p" style="font-size:13px;margin:0 0 8px;color:var(--yellow);font-weight:700">👇 Touche l'instrument pour lancer la prise</p><div class="reclist">`;
-    h += `<button class="recitem" data-practice="1" style="border-color:var(--cyan)"><span class="ae">🎯</span><span><b>S'entraîner sans enregistrer</b><small>Tout tourne en boucle avec ton clic${cur === 'hp' ? ' et toi dans les écouteurs' : ''}</small></span></button>`;
+      <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:10px"></p>
+      <button class="btn full practice-btn" data-practice="1">🎯 S'entraîner<small>tout tourne en boucle${cur === 'hp' ? ', tu t\'entends' : ''}, rien n'est enregistré</small></button>
+      <div class="rc-sep"><span>● ou enregistre</span></div>
+      <div class="tabs small" id="rcFresh" style="margin-bottom:10px"><button data-f="0" class="${P.recFresh ? '' : 'on'}">↪ Même piste</button><button data-f="1" class="${P.recFresh ? 'on' : ''}">➕ Nouvelle piste</button></div>
+      <div class="reclist">`;
     if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
     ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s2]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s2}</small></span></button>`; });
     h += `</div><button class="btn ghost full" id="recSet">⚙️ Réglages des prises</button>`;
     openSheet(h, b => {
       const txt = () => { const m = P.recMode || 'soft'; b.querySelector('#rcTxt').innerHTML = (m === 'hp' ? 'Tu entends <b>toutes les pistes + toi en direct</b> dans tes écouteurs.' : m === 'soft' ? 'La batterie et les pistes passent <b>doucement sur le haut-parleur</b> (sans te réentendre, sinon larsen).' : 'Tu n\'entends <b>que le clic</b> : la prise la plus propre sans écouteurs.') + ` Départ mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'}.`; };
       txt(); b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { P.recMode = x.dataset.rm; P.headphones = P.recMode === 'hp'; b.querySelectorAll('[data-rm]').forEach(y => y.classList.toggle('on', y === x)); txt(); save(); });
-      b.querySelectorAll('#rcFresh [data-f]').forEach(x => x.onclick = () => { P.recFresh = x.dataset.f === '1'; b.querySelectorAll('#rcFresh [data-f]').forEach(y => y.classList.toggle('on', y === x)); save(); const l = b.querySelector('.reclist'); l.classList.remove('nudge'); void l.offsetWidth; l.classList.add('nudge'); });
+      b.querySelectorAll('#rcFresh [data-f]').forEach(x => x.onclick = () => { P.recFresh = x.dataset.f === '1'; b.querySelectorAll('#rcFresh [data-f]').forEach(y => y.classList.toggle('on', y === x)); save(); });
       b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k, null, null, P.recFresh));
       b.querySelector('[data-practice]').onclick = () => startPractice();
       const rd = b.querySelector('[data-redo]'); if (rd) rd.onclick = () => quickRec(lr.type, lr.bar, lr.clip);
       b.querySelector('#recSet').onclick = () => openRecSheet((lr && lr.type) || 'guitare');
     });
   }
-  $('recBtn').onclick = () => { const l = document.querySelector('#sheetWrap:not([hidden]) .reclist'); if (l) { l.classList.remove('nudge'); void l.offsetWidth; l.classList.add('nudge'); toast('👇 Touche l\'instrument pour lancer la prise'); return; } openRecMenu(false); };
+  $('recBtn').onclick = () => { const l = document.querySelector('#sheetWrap:not([hidden]) .reclist'); if (l) { l.classList.remove('nudge'); void l.offsetWidth; l.classList.add('nudge'); setTimeout(() => l.classList.remove('nudge'), 1100); toast('👇 Touche l\'instrument pour lancer la prise'); return; } openRecMenu(false); };
 
   /* ---------- enregistrement ---------- */
   let recState = null;
@@ -1221,7 +1222,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
 
   function renderAll() { $('projName').value = P.name; renderTimeline(); renderIdeas(); updatePlayBtn(); }
 
-  window.LaboDebug = { Mic, get P() { return P; }, get E() { return E; } };
+  window.LaboDebug = { Mic, get P() { return P; }, get E() { return E; }, get player() { return player; } };
   /* ---------- démarrage ---------- */
   $('installBtn').hidden = NATIVE || isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
   if (!NATIVE && /Android/.test(navigator.userAgent)) { const a = document.createElement('a'); a.href = APK_URL; a.className = 'btn-inst'; a.style.textDecoration = 'none'; a.textContent = '🤖 Appli Android (son sans décalage)'; $('installBtn').after(a); }
