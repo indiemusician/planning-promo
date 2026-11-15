@@ -375,6 +375,72 @@
     return { d: best, gain: s0 > 0 ? bs / s0 : 9, n: on.length };
   };
 
+  /* ---------- recalage rythmique propre (découpage par attaques, sans étirer le son) ----------
+     origin : temps (s) dans x qui correspond au 1er temps du bloc ; sd : durée d'une double-croche
+     opts : strength 0..1, swing 0..60, res 'auto'|8|16, maxShift (s) */
+  DSP.quantizeAudio = function (x, sr, origin, sd, opts) {
+    opts = opts || {}; const strength = opts.strength == null ? .7 : opts.strength, swing = (opts.swing || 0) / 100;
+    /* 1. attaques précises : enveloppe à la milliseconde, on cherche les montées nettes au-dessus de ce qui résonne */
+    const ms = sr / 1000, h = Math.max(1, Math.round(ms)), nE = Math.floor(x.length / h) - 2, env = new Float32Array(Math.max(0, nE));
+    let gmx = 0; for (let k = 0; k < nE; k++) { let e = 0; for (let j = 0; j < 2 * h; j++) { const v = Math.abs(x[k * h + j]); if (v > e) e = v; } env[k] = e; if (e > gmx) gmx = e; }
+    if (gmx < 1e-4) return null;
+    const ratio = new Float32Array(nE);
+    for (let k = 16; k < nE; k++) { let m = 0; for (let j = k - 16; j < k - 4; j++) m += env[j]; m /= 12; let pk = 0; for (let j = k; j < Math.min(nE, k + 4); j++) pk = Math.max(pk, env[j]); ratio[k] = pk / (m + gmx * .01); }
+    const att = []; let lastK = -1e9;
+    for (let k = 17; k < nE - 1; k++) {
+      if (ratio[k] < 1.85 || ratio[k] < ratio[k - 1] || ratio[k] < ratio[k + 1]) continue;
+      let pk = 0; for (let j = k; j < Math.min(nE, k + 12); j++) pk = Math.max(pk, env[j]); if (pk < gmx * .07) continue;
+      let base = env[k]; for (let j = k; j >= Math.max(0, k - 10); j--) base = Math.min(base, env[j]);
+      let q = k; while (q > k - 12 && q > 0 && env[q - 1] > base + (pk - base) * .12) q--;
+      while (q < k + 10 && env[q] < base + (pk - base) * .12) q++;
+      if (q - lastK < 55) { if (att.length && ratio[k] > att[att.length - 1].w) { att[att.length - 1] = { t: q * h / sr, w: ratio[k] }; lastK = q; } continue; }
+      att.push({ t: q * h / sr, w: ratio[k] }); lastK = q;
+    }
+    const A = []; att.forEach(o => { const l = A[A.length - 1]; if (l && o.t - l.t < .055) { if (o.w > l.w) A[A.length - 1] = o; } else A.push(o); });
+    if (A.length < 2) return null;
+    /* 2. grille : position d'une double-croche k (avec le swing de la batterie) */
+    const gridT = k => origin + k * sd + (k % 2 !== 0 ? swing * sd * .66 : 0);
+    const near = (t, step) => { const k0 = Math.round((t - origin) / sd); let best = null; for (let k = k0 - 2; k <= k0 + 2; k++) { if (k % step) continue; const g = gridT(k); if (best == null || Math.abs(g - t) < Math.abs(best - t)) best = g; } return best; };
+    let res = opts.res;
+    if (!res || res === 'auto') { let odd = 0; A.forEach(o => { const k = Math.round((o.t - origin) / sd); if (k % 2 !== 0 && Math.abs(gridT(k) - o.t) < sd * .3) odd++; }); res = odd / A.length > .08 ? 16 : 8; }
+    const step = res === 16 ? 1 : 2, maxShift = opts.maxShift || Math.min(.09, sd * step * .45);
+    /* 3. décalage de chaque attaque */
+    let errB = 0, errA = 0, moved = 0;
+    A.forEach(o => { o.g = near(o.t, step); const e = o.g - o.t; o.shift = 0; if (Math.abs(e) <= maxShift && Math.abs(e) > .003) { o.shift = e * strength; moved++; } errB += Math.abs(e); errA += Math.abs(e - o.shift); });
+    /* garder l'ordre : jamais deux attaques qui se croisent */
+    for (let i = 1; i < A.length; i++) { const minT = A[i - 1].t + A[i - 1].shift + .03; if (A[i].t + A[i].shift < minT) A[i].shift = Math.max(0, minT - A[i].t); }
+    /* 4. rendu : chaque tranche part de son attaque, fondus à puissance constante, rallonge par micro-répétition de la fin */
+    const PR = Math.round(6 * ms), GUARD = Math.round(8 * ms);
+    const out = new Float32Array(x.length), wsum = new Float32Array(x.length);
+    const segs = [{ src: 0, dst: 0, pre: 0 }].concat(A.map(o => ({ src: Math.round(o.t * sr), dst: Math.round((o.t + o.shift) * sr), pre: PR })));
+    const add = (o, v, w) => { if (o >= 0 && o < out.length) { out[o] += v * w; wsum[o] += w; } };
+    for (let i = 0; i < segs.length; i++) {
+      const sg = segs[i], nx = segs[i + 1], srcEnd = nx ? nx.src - GUARD : x.length, dstEnd = nx ? nx.dst : x.length;
+      const need = dstEnd - sg.dst, have = Math.max(1, srcEnd - sg.src), fadeOut = nx ? PR : 0;
+      for (let j = -sg.pre; j < Math.min(need, have); j++) {
+        const si = sg.src + j; if (si < 0 || si >= x.length) continue;
+        let w = 1; if (j < 0) w = Math.sin((j + sg.pre) / sg.pre * Math.PI / 2);
+        if (fadeOut && j >= need - fadeOut) w *= Math.cos((j - (need - fadeOut)) / fadeOut * Math.PI / 2);
+        add(sg.dst + j, x[si], w);
+      }
+      if (need > have) {
+        const G = Math.max(Math.round(4 * ms), Math.min(Math.round(35 * ms), Math.floor(have * .4))), C = Math.max(2, Math.min(Math.round(8 * ms), G >> 1));
+        let pos = have - C;
+        while (pos < need) {
+          for (let j = 0; j < G && pos + j < need; j++) {
+            const si = sg.src + have - G + j; if (si < 0 || si >= x.length) continue;
+            let w = 1; if (j < C) w = Math.sin(j / C * Math.PI / 2); if (j >= G - C) w *= Math.cos((j - (G - C)) / C * Math.PI / 2);
+            if (fadeOut && pos + j >= need - fadeOut) w *= Math.cos((pos + j - (need - fadeOut)) / fadeOut * Math.PI / 2);
+            add(sg.dst + pos + j, x[si], w);
+          }
+          pos += G - C;
+        }
+      }
+    }
+    for (let i = 0; i < out.length; i++) if (wsum[i] > 1.02) out[i] /= wsum[i];
+    return { data: out, moved, notes: A.length, A, before: errB / A.length * 1000, after: errA / A.length * 1000, res };
+  };
+
   /* ---------- auto-tune (correction de hauteur granulaire) ---------- */
   DSP.autotune = function (x, sr, key) {
     const pt = DSP.pitchTrack(x, sr);

@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 17;
+  const VERSION = 18;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -326,6 +326,7 @@ registerProcessor('labo-cap',Cap);`;
     if (P.bars >= 4 && P.drumBars.indexOf('F') < 0) I.push({ em: '🥁', t: 'Des roulements', s: 'Un roulement toutes les 4 mesures', run: () => { snap(); for (let i = 3; i < P.bars; i += 4) if (P.drumBars[i] !== '-') P.drumBars[i] = 'F'; commit('🥁 Roulements ajoutés', true); autoplay(); } });
     if (P.bars >= 8 && P.drumBars.indexOf('B') < 0) I.push({ em: '🔥', t: 'Fais monter la sauce', s: 'Variation B plus chargée sur la 2e moitié', run: () => { snap(); for (let i = Math.floor(P.bars / 2); i < P.bars; i++) if (P.drumBars[i] === 'A') P.drumBars[i] = 'B'; commit('🔥 Variation B sur la 2e moitié', true); autoplay(); } });
     if (!has('voix')) I.push({ em: '🎤', t: 'Pose une voix', s: 'L\'écho malin se cale tout seul sur ton tempo', run: () => openRecSheet('voix') });
+    { const gq = P.clips.find(c => c.kind === 'audio' && !c.origAudio); if (gq) I.push({ em: '🎯', t: 'Recale ton rythme', s: 'Les petits décalages ramenés sur la batterie, sans abîmer le son', run: () => openQuantize(gq.id) }); }
     if (has('guitare') && !P.drumsFromGtr) I.push({ em: '🥁', t: 'Batterie qui suit ta guitare', s: 'La grosse caisse se cale sur ton grattage', run: () => { P.drumsFromGtr = true; drumsFromGuitar(); } });
     if (has('guitare') && !has('cordes')) I.push({ em: '🎼', t: 'Cordes auto', s: 'Des nappes qui suivent tes accords', run: autoStrings });
     const vt = tracksOf('voix').find(t => trackClips(t).length);
@@ -680,6 +681,7 @@ registerProcessor('labo-cap',Cap);`;
     let h = `<div class="sh-t"><span class="em">${t.em}</span>${c.label || t.name}</div>`;
     if (fresh) h += `<p class="sh-p">Bien joué ! Tu peux la boucler pour l'allonger, ou la recaler si elle traîne un peu.</p>`;
     h += `<button class="btn yel full" data-a="edit" style="font-family:Bungee;font-size:16px;margin-bottom:4px">✂️ Éditer : raccourcir, couper, effacer</button>`;
+    if (c.kind === 'audio') h += `<button class="btn full" data-a="quant" style="font-family:Bungee;font-size:15px;margin:8px 0 4px;background:var(--cyan)">🎯 Recaler le rythme${c.origAudio ? ' ✓' : ''}</button>`;
     h += `<div class="blk"><label>Boucler</label><div class="row"><div class="stepper"><button data-a="lm">−</button><b id="csLoops">×${c.loops || 1}</b><button data-a="lp">+</button></div><span class="sh-p" style="margin:0;font-size:12.5px">${c.lenBars} mesure${c.lenBars > 1 ? 's' : ''} par tour</span></div></div>`;
     h += `<div class="blk"><label>Position</label><div class="stepper"><button data-a="bm">−</button><b id="csBar">mes. ${c.bar + 1}</b><button data-a="bp">+</button></div></div>`;
     if (c.kind === 'audio') h += `<div class="blk"><label>Calage <span id="csNudge">${c.nudge || 0} ms</span></label><input type="range" min="-800" max="300" step="5" value="${c.nudge || 0}" id="csN"><div class="row" style="margin-top:8px"><span class="sh-p" style="font-size:12px;margin:0;flex:1">Vers la gauche si la prise traîne, vers la droite si elle se précipite.</span><button class="mini" data-a="auto">⏱️ Recaler tout seul</button></div></div>`;
@@ -701,6 +703,7 @@ registerProcessor('labo-cap',Cap);`;
         if (a === 'dup') { snap(); const n = clone(c); n.id = uid(); n.bar = c.bar + c.lenBars * (c.loops || 1); const tt = trackFor(t.type, n.bar, n.lenBars * (n.loops || 1)); n.trackId = tt.id; P.clips.push(n); const need = n.bar + n.lenBars * (n.loops || 1); while (P.bars < need) { P.bars++; P.drumBars.push('A'); } closeSheet(); commit('⧉ Bloc dupliqué', true); }
         if (a === 'pl') { closeSheet(); play(c.bar); }
         if (a === 'edit') { openEditor(c.id); }
+        if (a === 'quant') { openQuantize(c.id); }
         if (a === 'auto') { const au = AUD[c.audioId]; const st0 = Math.round(((c.pre || 0) + (c.inBars || 0) * barDur() - (c.nudge || 0) / 1000) * au.sr); const org = Math.min(.35, Math.max(0, st0 / au.sr)); const al = DSP.alignToGrid(au.data.subarray(Math.max(0, st0 - Math.round(org * au.sr))), au.sr, stepDur() * 4, 8, -org, org); if (!al || al.gain < 1.05 || Math.abs(al.d) < .015) { toast('Ta prise est déjà bien calée 👌'); return; } snap(); const np = (c.pre || 0) - (c.nudge || 0) / 1000 + al.d; c.pre = Math.max(0, np); c.nudge = np < 0 ? Math.round(-np * 1000) : 0; const n = b.querySelector('#csN'); if (n) { n.value = c.nudge; b.querySelector('#csNudge').textContent = c.nudge + ' ms'; } save(); toast('⏱️ Recalée de ' + Math.round(al.d * 1000) + ' ms', undo); }
         if (a === 'raw') { stop(); const bf = audioBuf(c.audioId); if (!bf) return; if (window._raw) { try { window._raw.stop(); } catch (e) { } } const src = AC.createBufferSource(); src.buffer = bf; src.connect(AC.destination); src.start(); window._raw = src; x.textContent = '■ Arrêter'; src.onended = () => { x.textContent = '🎧 Écouter la prise seule, sans rien'; }; x.onclick = () => { try { src.stop(); } catch (e) { } }; }
         if (a === 'del') { snap(); P.clips = P.clips.filter(x => x.id !== c.id); closeSheet(); commit('Bloc supprimé', true); }
@@ -820,6 +823,41 @@ registerProcessor('labo-cap',Cap);`;
       b.querySelector('#edReset').onclick = () => { c.mutes = []; setSel(c, 0, c.kind === 'audio' ? SB : (c.srcBars || c.lenBars) * 4); c.trimA = 0; c.trimB = null; cut = null; vA = 0; vB = SB; draw(); renderTimeline(); save(); };
       requestAnimationFrame(draw);
     });
+  }
+
+  /* ---------- recalage rythmique ---------- */
+  function openQuantize(id) {
+    const c = P.clips.find(x => x.id === id); if (!c || c.kind !== 'audio') return;
+    stop(); let strength = P.qStrength || .7, res = P.qRes || 'auto', result = null; const orig = c.origAudio || c.audioId, before = c.audioId;
+    openSheet(`<div class="sh-t"><span class="em">🎯</span>Recaler le rythme</div>
+      <p class="sh-p">Le labo repère chaque attaque de ta prise et la ramène vers le temps le plus proche de la batterie. Le son n'est jamais étiré ni transposé : les morceaux sont juste déplacés, avec des fondus invisibles.</p>
+      <div class="blk"><label>Force</label><div class="chips">${[[.4, '🪶 Léger'], [.7, '👌 Moyen'], [1, '🎯 Pile sur le temps']].map(([v, l]) => `<button class="chip ${v === strength ? 'on' : ''}" data-s="${v}">${l}</button>`).join('')}</div>
+        <p class="sh-p" style="font-size:12px;margin:8px 0 0">« Moyen » corrige les défauts mais garde ton groove humain.</p></div>
+      <div class="blk"><label>Grille</label><div class="chips">${[['auto', '✨ Auto'], [8, 'Croches'], [16, 'Doubles-croches']].map(([v, l]) => `<button class="chip ${String(v) === String(res) ? 'on' : ''}" data-r="${v}">${l}</button>`).join('')}</div></div>
+      <button class="btn yel full" id="qGo" style="font-family:Bungee;font-size:17px">🎯 Analyser et recaler</button>
+      <div id="qOut"></div>
+      ${c.origAudio ? '<button class="danger" id="qOrig">Revenir à la prise d\'origine</button>' : ''}`, b => {
+      const out = b.querySelector('#qOut');
+      b.querySelectorAll('[data-s]').forEach(x => x.onclick = () => { strength = +x.dataset.s; P.qStrength = strength; b.querySelectorAll('[data-s]').forEach(y => y.classList.toggle('on', y === x)); save(); });
+      b.querySelectorAll('[data-r]').forEach(x => x.onclick = () => { res = x.dataset.r === 'auto' ? 'auto' : +x.dataset.r; P.qRes = res; b.querySelectorAll('[data-r]').forEach(y => y.classList.toggle('on', y === x)); save(); });
+      const qo = b.querySelector('#qOrig'); if (qo) qo.onclick = () => { snap(); c.audioId = c.origAudio; delete c.origAudio; closeSheet(); commit('↩️ Prise d\'origine remise', true); };
+      b.querySelector('#qGo').onclick = () => {
+        busy(true, 'J\'écoute ton rythme…');
+        later(() => {
+          const a = AUD[orig]; const origin = (c.pre || 0) + (c.inBars || 0) * barDur() - (c.nudge || 0) / 1000;
+          const r = DSP.quantizeAudio(a.data, a.sr, origin, stepDur(), { strength, res, swing: P.swing || 0 });
+          busy(false);
+          if (!r || !r.moved) { out.innerHTML = '<div class="blk"><b>👌 Rien à corriger</b><br><span style="font-size:13px">Ta prise est déjà bien en place, ou je n\'y entends pas d\'attaques assez nettes.</span></div>'; return; }
+          snap(); result = addAudio(r.data, a.sr); c.origAudio = orig; c.audioId = result; renderTimeline(); save();
+          out.innerHTML = `<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ ${r.moved} attaque${r.moved > 1 ? 's' : ''} recalée${r.moved > 1 ? 's' : ''} sur ${r.notes}</b><br><span style="font-size:13px">Écart moyen avec la batterie : ${Math.round(r.before)} ms → ${Math.round(r.after)} ms · grille ${r.res === 16 ? 'doubles-croches' : 'croches'}</span></div>
+            <div class="row"><div class="tabs" style="flex:1"><button data-ab="o">Avant</button><button data-ab="q" class="on">Après</button></div><button class="btn yel" id="qPlay" style="padding:10px 14px">▶</button></div>
+            <button class="btn full" id="qKeep" style="margin-top:12px">✓ Garder</button>`;
+          b.querySelectorAll('[data-ab]').forEach(x => x.onclick = () => { c.audioId = x.dataset.ab === 'o' ? orig : result; b.querySelectorAll('[data-ab]').forEach(y => y.classList.toggle('on', y === x)); renderTimeline(); if (player.playing) play(c.bar); });
+          b.querySelector('#qPlay').onclick = () => { if (player.playing) { stop(); b.querySelector('#qPlay').textContent = '▶'; } else { play(c.bar); b.querySelector('#qPlay').textContent = '■'; } };
+          b.querySelector('#qKeep').onclick = () => { stop(); if (c.audioId === orig) delete c.origAudio; closeSheet(); commit(c.audioId === orig ? 'Prise d\'origine gardée' : '🎯 Rythme recalé', true); };
+        });
+      };
+    }, () => { if (player.playing) stop(); });
   }
 
   /* ---------- feuille piste ---------- */
@@ -1077,7 +1115,7 @@ registerProcessor('labo-cap',Cap);`;
     const saved = await DB.get('kv', 'project');
     if (saved && saved.v === 1) {
       P = saved;
-      for (const c of P.clips) { const ids = [c.audioId, c.src].filter(Boolean); for (const id of ids) if (!AUD[id]) { const a = await DB.get('audio', id); if (a) AUD[id] = { data: a.data, sr: a.sr }; } }
+      for (const c of P.clips) { const ids = [c.audioId, c.src, c.origAudio].filter(Boolean); for (const id of ids) if (!AUD[id]) { const a = await DB.get('audio', id); if (a) AUD[id] = { data: a.data, sr: a.sr }; } }
       P.clips = P.clips.filter(c => c.kind !== 'audio' || AUD[c.audioId]);
     }
     rebuildEngine();
