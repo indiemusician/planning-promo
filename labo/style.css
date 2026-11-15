@@ -235,3 +235,4 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .burst{position:fixed;pointer-events:none;font-family:'Bungee';font-size:22px;text-shadow:3px 3px 0 var(--ink);z-index:70}
 
 body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
+.clip .mz{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(-45deg,rgba(7,10,31,.55) 0 5px,rgba(7,10,31,.35) 5px 10px);z-index:1;pointer-events:none}

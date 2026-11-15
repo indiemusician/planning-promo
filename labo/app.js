@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 21;
+  const VERSION = 22;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -211,7 +211,7 @@ registerProcessor('labo-cap',Cap);`;
     for (let i = 0; i < P.bars; i++) h += `<div class="rcell${i === P.cursor ? ' cur' : ''}" data-act="cursor" data-bar="${i}">${i + 1}</div>`;
     h += `</div>`;
     P.tracks.forEach(t => {
-      h += `<div class="trow"><button class="thd${t.mute ? ' muted' : ''}" style="--tc:${t.color}" data-act="track" data-id="${t.id}"><span class="te">${t.em}</span><span class="tn">${t.name}</span><span class="tfx">${t.mute ? '🔇 ' : ''}${t.solo ? '⭐ ' : ''}${fxLabel(t)}</span></button>`;
+      h += `<div class="trow"><button class="thd${t.mute ? ' muted' : ''}" style="--tc:${t.color}" data-act="track" data-id="${t.id}"><span class="te">${t.em}</span><span class="tn">${t.name}</span><span class="tfx">${t.mute ? '🔇 ' : ''}${t.solo ? '⭐ ' : ''}${(t.pan || 0) < -.05 ? '◀ ' : (t.pan || 0) > .05 ? '▶ ' : ''}${fxLabel(t)}</span></button>`;
       if (t.kind === 'drums') {
         h += `<div class="lane drum" style="width:${P.bars * BW}px">`;
         for (let i = 0; i < P.bars; i++) { const v = P.drumBars[i] || 'A'; const cls = v === '-' ? 'vN' : 'v' + v; const lab = v === 'F' ? '🥁' : v === '-' ? '·' : v; h += `<button class="dbar ${cls}" data-act="dbar" data-bar="${i}"><i>${lab}</i></button>`; }
@@ -223,6 +223,7 @@ registerProcessor('labo-cap',Cap);`;
           h += `<button class="clip" style="--tc:${t.color};left:${c.bar * BW}px;width:${w}px" data-act="clip" data-id="${c.id}">`;
           h += c.kind === 'audio' ? `<canvas data-wave="${c.id}"></canvas>` : rollSVG(c, t);
           for (let r = 1; r < (c.loops || 1); r++) h += `<i class="rep" style="left:${r * c.lenBars * BW}px"></i>`;
+          for (let r = 0; r < (c.loops || 1); r++) Labo.allMutes(c).forEach(([m0, m1]) => { const a0 = Math.max(0, m0), a1 = Math.min(c.lenBars * 4, m1); if (a1 > a0) h += `<i class="mz" style="left:${r * c.lenBars * BW + a0 / 4 * BW}px;width:${(a1 - a0) / 4 * BW}px"></i>`; });
           h += `<span class="cl">${c.label || t.name}${(c.loops || 1) > 1 ? ' ×' + c.loops : ''}</span></button>`;
         });
         h += `</div></div>`;
@@ -335,6 +336,7 @@ registerProcessor('labo-cap',Cap);`;
     if (P.bars >= 8 && P.drumBars.indexOf('B') < 0) I.push({ em: '🔥', t: 'Fais monter la sauce', s: 'Variation B plus chargée sur la 2e moitié', run: () => { snap(); for (let i = Math.floor(P.bars / 2); i < P.bars; i++) if (P.drumBars[i] === 'A') P.drumBars[i] = 'B'; commit('🔥 Variation B sur la 2e moitié', true); autoplay(); } });
     if (!has('voix')) I.push({ em: '🎤', t: 'Pose une voix', s: 'L\'écho malin se cale tout seul sur ton tempo', run: () => openRecSheet('voix') });
     { const gq = P.clips.find(c => c.kind === 'audio' && !c.origAudio); if (gq) I.push({ em: '🎯', t: 'Recale ton rythme', s: 'Les petits décalages ramenés sur la batterie, sans abîmer le son', run: () => openQuantize(gq.id) }); }
+    { const gt = P.tracks.filter(t => t.type === 'guitare' && trackClips(t).length); if (gt.length >= 2 && gt.every(t => !t.pan)) I.push({ em: '↔️', t: 'Élargis tes guitares', s: 'Une à gauche, une à droite, comme sur les disques', run: () => { snap(); gt[0].pan = -.65; gt[1].pan = .65; commit('↔️ Guitares écartées gauche / droite', true); autoplay(); } }); }
     if (has('guitare') && !P.drumsFromGtr) I.push({ em: '🥁', t: 'Batterie qui suit ta guitare', s: 'La grosse caisse se cale sur ton grattage', run: () => { P.drumsFromGtr = true; drumsFromGuitar(); } });
     if (has('guitare') && !has('cordes')) I.push({ em: '🎼', t: 'Cordes auto', s: 'Des nappes qui suivent tes accords', run: autoStrings });
     const vt = tracksOf('voix').find(t => trackClips(t).length);
@@ -496,11 +498,16 @@ registerProcessor('labo-cap',Cap);`;
   $('recBtn').onclick = () => {
     AC.resume(); const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs' + (P.monitor !== false ? ' + ta voix/guitare en retour' : ''), soft: '🔈 batterie douce', click: '🔔 clic seul, sans les autres pistes' }[P.recMode || 'soft'];
     const lr = P.lastRec && P.clips.find(c => c.id === P.lastRec.clip) ? P.lastRec : null;
-    let h = `<div class="sh-t"><span class="em">🔴</span>On enregistre quoi ?</div><p class="sh-p" style="font-size:12.5px;margin-bottom:10px">Touche et c'est parti, à partir de la mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'} · ${mode}.</p><div class="reclist">`;
+    const cur = P.recMode || 'soft';
+    let h = `<div class="sh-t"><span class="em">🔴</span>On enregistre quoi ?</div>
+      <div class="tabs" id="rcMode" style="margin-bottom:8px"><button data-rm="hp" class="${cur === 'hp' ? 'on' : ''}">🎧 Écouteurs</button><button data-rm="soft" class="${cur === 'soft' ? 'on' : ''}">🔈 Haut-parleur</button><button data-rm="click" class="${cur === 'click' ? 'on' : ''}">🔔 Clic</button></div>
+      <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:10px"></p><div class="reclist">`;
     if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
     ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s2]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s2}</small></span></button>`; });
     h += `</div><button class="btn ghost full" id="recSet">⚙️ Réglages des prises</button>`;
     openSheet(h, b => {
+      const txt = () => { const m = P.recMode || 'soft'; b.querySelector('#rcTxt').innerHTML = (m === 'hp' ? 'Tu entends <b>toutes les pistes + toi en direct</b> dans tes écouteurs.' : m === 'soft' ? 'La batterie et les pistes passent <b>doucement sur le haut-parleur</b> (sans te réentendre, sinon larsen).' : 'Tu n\'entends <b>que le clic</b> : la prise la plus propre sans écouteurs.') + ` Départ mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'}.`; };
+      txt(); b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { P.recMode = x.dataset.rm; P.headphones = P.recMode === 'hp'; b.querySelectorAll('[data-rm]').forEach(y => y.classList.toggle('on', y === x)); txt(); save(); });
       b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k));
       const rd = b.querySelector('[data-redo]'); if (rd) rd.onclick = () => quickRec(lr.type, lr.bar, lr.clip);
       b.querySelector('#recSet').onclick = () => openRecSheet((lr && lr.type) || 'guitare');
@@ -740,11 +747,12 @@ registerProcessor('labo-cap',Cap);`;
 
   /* ---------- éditeur tactile ---------- */
   /* la sélection est gardée en temps (beats) : précise au millième, sans casser la grille des mesures */
+  /* le bloc ne bouge jamais dans la timeline : on garde son départ, le début retiré devient simplement muet */
   function setSel(c, S, Eb) {
-    const oldIn = c.inBars || 0, nin = Math.max(0, Math.floor(S / 4 + 1e-6)), d = nin - oldIn;
-    if (d) { c.mutes = (c.mutes || []).map(([m0, m1]) => [m0 - d * 4, m1 - d * 4]).filter(m => m[1] > 0).map(m => [Math.max(0, m[0]), m[1]]); c.bar = Math.max(0, c.bar + d); }
-    c.inBars = nin; c.trimA = +(S - nin * 4).toFixed(4); if (c.trimA < 1e-3) c.trimA = 0;
-    c.lenBars = Math.max(1, Math.ceil((Eb - nin * 4) / 4 - 1e-6)); const tb = +(Eb - nin * 4).toFixed(4); c.trimB = tb >= c.lenBars * 4 - 1e-3 ? null : tb;
+    const nin = c.inBars || 0; if (S < nin * 4) { const d = Math.ceil((nin * 4 - S) / 4); /* on rouvre un début coupé avant : le bloc recule d'autant de mesures pour rester calé */ if (c.bar - d >= 0) { c.mutes = (c.mutes || []).map(([m0, m1]) => [m0 + d * 4, m1 + d * 4]); c.bar -= d; c.inBars = nin - d; } }
+    const ni = c.inBars || 0; S = Math.max(S, ni * 4);
+    c.trimA = +(S - ni * 4).toFixed(4); if (c.trimA < 1e-3) c.trimA = 0;
+    c.lenBars = Math.max(1, Math.ceil((Eb - ni * 4) / 4 - 1e-6)); const tb = +(Eb - ni * 4).toFixed(4); c.trimB = tb >= c.lenBars * 4 - 1e-3 ? null : tb;
   }
   const selOf = c => { const i = (c.inBars || 0) * 4; return [i + (c.trimA || 0), i + (c.trimB != null ? c.trimB : c.lenBars * 4)]; };
   function openEditor(id) {
@@ -829,6 +837,7 @@ registerProcessor('labo-cap',Cap);`;
         c.mutes = (c.mutes || []).filter(m => m[0] < k).map(m => [m[0], Math.min(m[1], k)]);
         c2.mutes = (c2.mutes || []).filter(m => m[1] > k);
         setSel(c, S, cut); setSel(c2, cut, Eb); c2.loops = 1; c.loops = 1;
+        { const k = Math.floor((c2.trimA || 0) / 4 + 1e-6); if (k > 0) { c2.inBars = (c2.inBars || 0) + k; c2.bar += k; c2.trimA = +(c2.trimA - 4 * k).toFixed(4); if (c2.trimB != null) c2.trimB -= 4 * k; c2.lenBars = Math.max(1, c2.lenBars - k); c2.mutes = (c2.mutes || []).map(([a0, a1]) => [a0 - 4 * k, a1 - 4 * k]).filter(m => m[1] > 0).map(m => [Math.max(0, m[0]), m[1]]); } }
         P.clips.push(c2); buzz('cut'); renderTimeline(); save(); closeSheet(); toast('✂️ Coupé en deux blocs : touche celui que tu veux enlever', undo);
       };
       b.querySelector('#edPlay').onclick = () => { closeSheet(); play(c.bar); };
@@ -878,6 +887,7 @@ registerProcessor('labo-cap',Cap);`;
     const t = P.tracks.find(x => x.id === id); if (!t) return;
     let h = `<div class="sh-t"><span class="em">${t.em}</span><input class="txtin" id="tsName" value="${t.name.replace(/"/g, '&quot;')}" style="font-family:Bungee;font-size:17px"></div>`;
     h += `<div class="blk"><label>Volume</label><input type="range" min="0" max="120" value="${Math.round((t.vol == null ? .85 : t.vol) * 100)}" id="tsVol"></div>`;
+    h += `<div class="blk"><label>Stéréo <span id="tsPanTxt">${panTxt(t.pan || 0)}</span></label><div class="row" style="gap:10px;flex-wrap:nowrap"><b style="font-size:13px">◀ G</b><input type="range" min="-100" max="100" step="5" value="${Math.round((t.pan || 0) * 100)}" id="tsPan" style="flex:1"><b style="font-size:13px">D ▶</b></div><div class="chips" style="margin-top:10px"><button class="chip" data-pn="-0.7">Gauche</button><button class="chip" data-pn="0">Centre</button><button class="chip" data-pn="0.7">Droite</button></div></div>`;
     h += `<div class="blk"><div class="tog">Muet<span class="sw ${t.mute ? 'on' : ''}" data-t="mute"></span></div><div class="tog">Solo<span class="sw ${t.solo ? 'on' : ''}" data-t="solo"></span></div></div>`;
     if (t.kind === 'drums') {
       h += `<button class="btn yel full" id="tsBeat">🥁 Ouvrir l'atelier batterie</button>`;
@@ -891,6 +901,9 @@ registerProcessor('labo-cap',Cap);`;
     openSheet(h, b => {
       b.querySelector('#tsName').oninput = e => { t.name = e.target.value || t.name; save(); renderTimeline(); };
       const v = b.querySelector('#tsVol'); v.oninput = () => { t.vol = v.value / 100; applyTracks(); }; v.onchange = save;
+      const pn = b.querySelector('#tsPan'), setPan = x => { t.pan = Math.abs(x) < .06 ? 0 : x; pn.value = Math.round(t.pan * 100); b.querySelector('#tsPanTxt').textContent = panTxt(t.pan); applyTracks(); renderTimeline(); save(); };
+      pn.oninput = () => { let x = pn.value / 100; if (Math.abs(x) < .08 && navigator.vibrate) navigator.vibrate(5); setPan(x); };
+      b.querySelectorAll('[data-pn]').forEach(x => x.onclick = () => { setPan(+x.dataset.pn); if (!player.playing) play(); });
       b.querySelectorAll('[data-t]').forEach(x => x.onclick = () => { const k = x.dataset.t; t[k] = !t[k]; x.classList.toggle('on', t[k]); applyTracks(); renderTimeline(); save(); });
       b.querySelectorAll('[data-fx]').forEach(x => x.onclick = () => { const k = x.dataset.fx; const on = !t.fx[k]; x.classList.toggle('on', on); setFx(t, k, on); });
       b.querySelectorAll('[data-i]').forEach(x => x.onclick = () => { snap(); t.inst = x.dataset.i; const T = TYPES[t.inst]; t.em = T.em; t.color = T.color; b.querySelectorAll('[data-i]').forEach(y => y.classList.toggle('on', y === x)); commit(T.em + ' Rejoué au ' + T.name.toLowerCase(), true); E.note(t.inst, T.range[0] + 7, AC.currentTime + .02, .4, .9, E.chain(t).in); });
@@ -898,6 +911,7 @@ registerProcessor('labo-cap',Cap);`;
       const d = b.querySelector('#tsDel'); if (d) d.onclick = () => { snap(); P.clips = P.clips.filter(c => c.trackId !== t.id); P.tracks = P.tracks.filter(x => x.id !== t.id); closeSheet(); commit('Piste supprimée', true); };
     });
   }
+  function panTxt(p) { return Math.abs(p) < .06 ? '· au centre' : '· ' + Math.round(Math.abs(p) * 100) + ' % ' + (p < 0 ? 'à gauche' : 'à droite'); }
   function fxBtn(t, k) { const f = FXINFO[k]; return `<button class="fx ${t.fx[k] ? 'on' : ''}" data-fx="${k}"><span class="fe">${f[0]}</span><span><b>${f[1]}</b><small>${f[2]}</small></span></button>`; }
 
   /* ---------- atelier batterie ---------- */
