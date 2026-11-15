@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 24;
+  const VERSION = 25;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -115,7 +115,7 @@ registerProcessor('labo-cap',Cap);`;
     async ensure() {
       if (this.stream && this.stream.active && this.node) return true;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nomic');
-      const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
+      const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1, sampleRate: { ideal: AC.sampleRate }, latency: { ideal: 0 } };
       try { this.stream = await navigator.mediaDevices.getUserMedia({ audio: DEV.micId ? { ...base, deviceId: { exact: DEV.micId } } : base }); }
       catch (e) { if (!DEV.micId) throw e; DEV.micId = null; saveDev(); this.stream = await navigator.mediaDevices.getUserMedia({ audio: base }); }
       if (AC.state !== 'running') { try { await AC.resume(); } catch (e) { } }
@@ -559,7 +559,7 @@ registerProcessor('labo-cap',Cap);`;
   function setLatency(mode) {
     if (!AC || acMode === mode) return; const A = window.AudioContext || window.webkitAudioContext;
     if (player) player.stop(); Mic.release();
-    const old = AC; let n; try { n = new A({ latencyHint: mode === 'fast' ? 0.005 : 'playback' }); } catch (e) { try { n = new A({ latencyHint: mode === 'fast' ? 'interactive' : 'playback' }); } catch (e2) { return; } }
+    const old = AC; let n; try { n = new A(mode === 'fast' ? { latencyHint: 0, sampleRate: 48000 } : { latencyHint: 'playback' }); } catch (e) { try { n = new A({ latencyHint: mode === 'fast' ? 'interactive' : 'playback' }); } catch (e2) { return; } }
     AC = n; acMode = mode; AC.resume(); AC.onstatechange = old.onstatechange; rebuildEngine();
     for (const k in AUD) { AUD[k].buf = AUD[k].buf || null; }
     setTimeout(() => { try { old.close(); } catch (e) { } }, 300);
@@ -661,7 +661,7 @@ registerProcessor('labo-cap',Cap);`;
       <div id="syOut"></div>
       ${back ? '<button class="btn full" id="syBack">← Retour à l\'enregistrement</button>' : '<button class="btn full" data-close>OK</button>'}`, b => {
       const out = b.querySelector('#syOut');
-      const done = (ms, how) => { DEV.lat = ms; DEV.latHow = how; saveDev(); out.innerHTML = `<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ Retard mesuré : ${Math.round(ms)} ms</b><br><span style="font-size:13px">Tes prises seront recalées automatiquement.</span></div>`; };
+      const done = (ms, how) => { DEV.lat = ms; DEV.latHow = how; saveDev(); out.innerHTML = `<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ Retard mesuré : ${Math.round(ms)} ms</b><br><span style="font-size:13px">Tes prises seront recalées automatiquement.${how === 'boucle' ? ' C\'est aussi à peu près le retard de ton retour dans les écouteurs' + (ms < 30 ? ' : imperceptible 👌' : ms < 60 ? ' : léger, ça se joue bien.' : ' : il se sent, coupe le retour pour la guitare.') : ''}</span></div>`; };
       const fail = msg => { out.innerHTML = `<div class="blk"><b>😕 ${msg}</b></div>`; };
       if (back) b.querySelector('#syBack').onclick = back;
       b.querySelector('#syMicBtn').onclick = async () => {
@@ -672,12 +672,12 @@ registerProcessor('labo-cap',Cap);`;
         opts.forEach((d, i) => { const c = document.createElement('button'); c.className = 'chip' + ((DEV.micId || '') === d.deviceId ? ' on' : ''); const lb = d.label || ''; c.textContent = !d.deviceId ? 'Automatique' : /bluetooth|headset|hands-?free|airpods|buds|casque|écouteur|ecouteur|sco/i.test(lb) ? '🎧 Micro des écouteurs (déconseillé)' : /speaker|built-?in|bottom|interne|phone|téléphone|telephone|microphone$/i.test(lb) ? '📱 Micro du téléphone' + (/back|arrière|top|haut/i.test(lb) ? ' (2)' : '') : (lb || ('Micro ' + i)); c.title = lb; c.onclick = () => { DEV.micId = d.deviceId || null; saveDev(); w.querySelectorAll('.chip').forEach(y => y.classList.toggle('on', y === c)); toast('🎙️ ' + c.textContent); }; w.appendChild(c); });
       };
       b.querySelector('#syMon').onclick = async e => {
-        const btn = e.currentTarget; AC.resume(); if (!(await needMic())) return; if (AC.state !== 'running') await AC.resume();
+        const btn = e.currentTarget; setLatency('fast'); AC.resume(); if (!(await needMic())) return; if (AC.state !== 'running') await AC.resume();
         Mic.monitor(true, P.monVol == null ? .9 : P.monVol); btn.textContent = '🎙️ Parle ou joue… (6 s)';
         setTimeout(() => { Mic.release(); btn.textContent = '🎧 Tester : je m\'entends ?'; out.innerHTML = '<div class="blk sh-p" style="margin-bottom:0">Tu t\'es entendu ? Si oui, tout est prêt. Si non, dis-le-moi en précisant tes écouteurs (Bluetooth ou filaires) : c\'est que ton téléphone bloque le retour.</div>'; }, 6000);
       };
       b.querySelector('#syLoop').onclick = async () => {
-        AC.resume(); if (!(await needMic())) return;
+        if (wantsFast()) setLatency('fast'); AC.resume(); if (!(await needMic())) return;
         out.innerHTML = '<div class="blk"><b>🔁 Mesure en cours… ne bouge pas</b></div>';
         Mic.start(); const t0 = AC.currentTime + .6, iv = .5, ticks = [];
         for (let i = 0; i < 8; i++) { const t = t0 + i * iv; ticks.push(t); const o = AC.createOscillator(), g = AC.createGain(); o.type = 'square'; o.frequency.value = 1100; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.9, t + .001); g.gain.setValueAtTime(.9, t + .012); g.gain.linearRampToValueAtTime(0, t + .015); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + .03); }
