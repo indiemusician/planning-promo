@@ -585,7 +585,7 @@ registerProcessor('labo-cap',Cap);`;
         const list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
         const w = b.querySelector('#syMics'); w.innerHTML = '';
         const opts = [{ deviceId: '', label: 'Automatique' }].concat(list.filter(d => d.deviceId && d.deviceId !== 'default'));
-        opts.forEach((d, i) => { const c = document.createElement('button'); c.className = 'chip' + ((DEV.micId || '') === d.deviceId ? ' on' : ''); c.textContent = d.label || ('Micro ' + i); c.onclick = () => { DEV.micId = d.deviceId || null; saveDev(); w.querySelectorAll('.chip').forEach(y => y.classList.toggle('on', y === c)); toast('🎙️ ' + c.textContent); }; w.appendChild(c); });
+        opts.forEach((d, i) => { const c = document.createElement('button'); c.className = 'chip' + ((DEV.micId || '') === d.deviceId ? ' on' : ''); const lb = d.label || ''; c.textContent = !d.deviceId ? 'Automatique' : /bluetooth|headset|hands-?free|airpods|buds|casque|écouteur|ecouteur|sco/i.test(lb) ? '🎧 Micro des écouteurs (déconseillé)' : /speaker|built-?in|bottom|interne|phone|téléphone|telephone|microphone$/i.test(lb) ? '📱 Micro du téléphone' + (/back|arrière|top|haut/i.test(lb) ? ' (2)' : '') : (lb || ('Micro ' + i)); c.title = lb; c.onclick = () => { DEV.micId = d.deviceId || null; saveDev(); w.querySelectorAll('.chip').forEach(y => y.classList.toggle('on', y === c)); toast('🎙️ ' + c.textContent); }; w.appendChild(c); });
       };
       b.querySelector('#syLoop').onclick = async () => {
         AC.resume(); if (!(await needMic())) return;
