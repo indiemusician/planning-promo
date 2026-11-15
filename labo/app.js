@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 13;
+  const VERSION = 14;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } DB.put('kv', 'device', DEV); };
@@ -242,7 +242,19 @@ registerProcessor('labo-cap',Cap);`;
     for (let i = 0; i < cols; i++) { const s0 = base + Math.floor(i / cols * c.lenBars * spb), s1 = Math.min(total, base + Math.floor((i + 1) / cols * c.lenBars * spb)); let m = 0; for (let j = s0; j < s1; j += 8) { const v = Math.abs(a.data[j]); if (v > m) m = v; } peaks.push(m); if (m > mx) mx = m; }
     for (let r = 0; r < loops; r++) peaks.forEach((m, i) => { const hh = Math.max(1, m / mx * 18 * dpr); g.fillRect(r * repW * dpr + i * 2, cv.height / 2 + 4 * dpr - hh, 1.4 * dpr, hh * 2); });
   }
+  /* appui long sur un bloc : petit déclic, puis l'éditeur s'ouvre */
+  let lp = null, lpFired = false;
+  $('tlInner').addEventListener('pointerdown', e => {
+    const el = e.target.closest('.clip'); if (!el) return; lpFired = false;
+    const x0 = e.clientX, y0 = e.clientY; el.style.transition = 'transform .45s'; el.style.transform = 'scale(.96)';
+    lp = { el, x0, y0, t: setTimeout(() => { lpFired = true; if (navigator.vibrate) navigator.vibrate([18, 30, 12]); el.style.transform = 'scale(1.04)'; setTimeout(() => { el.style.transform = ''; openEditor(el.dataset.id); }, 120); }, 480) };
+  });
+  const lpCancel = () => { if (lp) { clearTimeout(lp.t); lp.el.style.transform = ''; lp = null; } };
+  $('tlInner').addEventListener('pointermove', e => { if (lp && Math.hypot(e.clientX - lp.x0, e.clientY - lp.y0) > 10) lpCancel(); });
+  $('tlInner').addEventListener('pointerup', lpCancel); $('tlInner').addEventListener('pointercancel', lpCancel);
+  $('tlInner').addEventListener('contextmenu', e => { if (e.target.closest('.clip')) e.preventDefault(); });
   $('tlInner').addEventListener('click', e => {
+    if (lpFired) { lpFired = false; return; }
     const el = e.target.closest('[data-act]'); if (!el) return; const act = el.dataset.act;
     if (act === 'cursor') { P.cursor = +el.dataset.bar; renderTimeline(); save(); if (player.playing) play(); }
     else if (act === 'dbar') {
@@ -538,10 +550,20 @@ registerProcessor('labo-cap',Cap);`;
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
-    const lat = (P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006);
+    const lat = ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006)) + (DEV.inLat || 0);
     let s0 = Math.round((songStart - rec.t0 + lat) * sr);
     let x;
     if (s0 >= 0) x = rec.data.slice(s0); else { x = new Float32Array(rec.data.length - s0); x.set(rec.data, -s0); }
+    /* recalage auto : on cale les attaques de la prise sur la grille du tempo, et le labo apprend le retard du téléphone */
+    let alignMsg = '';
+    if (P.autoAlign !== false && TYPES[st.type].kind === 'audio') {
+      const al = DSP.alignToGrid(x, sr, stepDur() * 4, 8);
+      if (al && Math.abs(al.d) > .025 && al.gain > 1.2) {
+        const k = Math.round(al.d * sr); if (k > 0) x = x.slice(k); else { const y = new Float32Array(x.length - k); y.set(x, -k); x = y; }
+        DEV.inHist = (DEV.inHist || []).concat([(DEV.inLat || 0) + al.d]).slice(-5); DEV.inLat = Math.max(-.1, Math.min(.8, DSP.median(DEV.inHist))); saveDev();
+        alignMsg = ' · recalée de ' + Math.round(al.d * 1000) + ' ms';
+      }
+    }
     const dur = x.length / sr;
     if (dur < .6) { toast('Prise trop courte, réessaie'); renderTimeline(); return; }
     const lenBars = st.len || Math.max(1, Math.round(dur / barDur()));
@@ -555,7 +577,7 @@ registerProcessor('labo-cap',Cap);`;
     if (T.kind === 'audio') {
       const t = trackFor(st.type, st.startBar, lenBars);
       P.clips.push({ id: uid(), kind: 'audio', trackId: t.id, bar: st.startBar, lenBars, loops: 1, audioId, nudge: 0 });
-      commit(T.em + ' ' + T.name + ' enregistrée · ' + lenBars + ' mesure' + (lenBars > 1 ? 's' : '') + (st.type === 'voix' ? ' · écho malin activé' : ''), true);
+      commit(T.em + ' ' + T.name + ' enregistrée · ' + lenBars + ' mesure' + (lenBars > 1 ? 's' : '') + alignMsg + (st.type === 'voix' ? ' · écho malin activé' : ''), true);
       if (P.tracks.find(t => t.id === P.clips[P.clips.length - 1].trackId).fx.autotune) tunedBuf(audioId);
       setTimeout(() => openClipSheet(P.clips[P.clips.length - 1].id, true), 350);
     } else {
@@ -646,7 +668,7 @@ registerProcessor('labo-cap',Cap);`;
     h += `<button class="btn yel full" data-a="edit" style="font-family:Bungee;font-size:16px;margin-bottom:4px">✂️ Éditer : raccourcir, couper, effacer</button>`;
     h += `<div class="blk"><label>Boucler</label><div class="row"><div class="stepper"><button data-a="lm">−</button><b id="csLoops">×${c.loops || 1}</b><button data-a="lp">+</button></div><span class="sh-p" style="margin:0;font-size:12.5px">${c.lenBars} mesure${c.lenBars > 1 ? 's' : ''} par tour</span></div></div>`;
     h += `<div class="blk"><label>Position</label><div class="stepper"><button data-a="bm">−</button><b id="csBar">mes. ${c.bar + 1}</b><button data-a="bp">+</button></div></div>`;
-    if (c.kind === 'audio') h += `<div class="blk"><label>Calage <span id="csNudge">${c.nudge || 0} ms</span></label><input type="range" min="-250" max="250" step="5" value="${c.nudge || 0}" id="csN"><p class="sh-p" style="font-size:12px;margin:8px 0 0">Vers la gauche si la prise traîne, vers la droite si elle se précipite.</p></div>`;
+    if (c.kind === 'audio') h += `<div class="blk"><label>Calage <span id="csNudge">${c.nudge || 0} ms</span></label><input type="range" min="-800" max="300" step="5" value="${c.nudge || 0}" id="csN"><div class="row" style="margin-top:8px"><span class="sh-p" style="font-size:12px;margin:0;flex:1">Vers la gauche si la prise traîne, vers la droite si elle se précipite.</span><button class="mini" data-a="auto">⏱️ Recaler tout seul</button></div></div>`;
     if (c.kind === 'audio' && t.type === 'voix' || c.src) {
       h += `<div class="blk"><label>${c.src ? 'Rejouer ta voix au…' : 'Transformer ta voix en…'}</label><div class="chips">${INSTS.map(k => `<button class="chip" data-tr="${k}">${TYPES[k].em} ${TYPES[k].name}</button>`).join('')}</div></div>`;
     }
@@ -665,6 +687,7 @@ registerProcessor('labo-cap',Cap);`;
         if (a === 'dup') { snap(); const n = clone(c); n.id = uid(); n.bar = c.bar + c.lenBars * (c.loops || 1); const tt = trackFor(t.type, n.bar, n.lenBars * (n.loops || 1)); n.trackId = tt.id; P.clips.push(n); const need = n.bar + n.lenBars * (n.loops || 1); while (P.bars < need) { P.bars++; P.drumBars.push('A'); } closeSheet(); commit('⧉ Bloc dupliqué', true); }
         if (a === 'pl') { closeSheet(); play(c.bar); }
         if (a === 'edit') { openEditor(c.id); }
+        if (a === 'auto') { const au = AUD[c.audioId]; const st0 = Math.round(((c.inBars || 0) * barDur()) * au.sr); const al = DSP.alignToGrid(au.data.subarray(st0), au.sr, stepDur() * 4, 8); if (!al || al.gain < 1.05) { toast('Ta prise est déjà bien calée 👌'); return; } snap(); c.nudge = Math.round(-al.d * 1000); const n = b.querySelector('#csN'); if (n) { n.value = c.nudge; b.querySelector('#csNudge').textContent = c.nudge + ' ms'; } save(); toast('⏱️ Recalée de ' + Math.round(al.d * 1000) + ' ms', undo); }
         if (a === 'raw') { stop(); const bf = audioBuf(c.audioId); if (!bf) return; if (window._raw) { try { window._raw.stop(); } catch (e) { } } const src = AC.createBufferSource(); src.buffer = bf; src.connect(AC.destination); src.start(); window._raw = src; x.textContent = '■ Arrêter'; src.onended = () => { x.textContent = '🎧 Écouter la prise seule, sans rien'; }; x.onclick = () => { try { src.stop(); } catch (e) { } }; }
         if (a === 'del') { snap(); P.clips = P.clips.filter(x => x.id !== c.id); closeSheet(); commit('Bloc supprimé', true); }
         if (a === 'ab') { closeSheet(); autoBass(); }
