@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 29;
+  const VERSION = 30;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -321,7 +321,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
   }
   if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
   function play(from) { if (acMode === 'fast' && DEV.audioMode !== 'fast' && !recState) setLatency('stable'); if (AC.state !== 'running') AC.resume(); applyTracks(); player.start(from == null ? P.cursor : from, {}); updatePlayBtn(); keepAwake(true); }
-  function stop() { player.stop(); updatePlayBtn(); if (!recState) keepAwake(false); }
+  function stop() { if (practice) { endPractice(false); return; } player.stop(); updatePlayBtn(); if (!recState) keepAwake(false); }
   function updatePlayBtn() { $('playBtn').classList.toggle('on', player.playing && !player.opt.preview); $('loopBtn').classList.toggle('on', P.loop); }
   $('playBtn').onclick = () => { AC.resume(); (player.playing && !player.opt.preview) ? stop() : play(); };
   $('homeBtn').onclick = () => { P.cursor = 0; renderTimeline(); $('tl').scrollTo({ left: 0, behavior: 'smooth' }); if (player.playing) play(0); save(); };
@@ -343,7 +343,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
         }
       }
     }
-    if (recState) recFrame();
+    if (recState) recFrame(); else if (practice) practiceFrame();
     requestAnimationFrame(frame);
   }
 
@@ -527,6 +527,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:8px"></p>
       <div class="tabs" id="rcFresh" style="margin-bottom:6px"><button data-f="0" class="${P.recFresh ? '' : 'on'}">↪ Même piste</button><button data-f="1" class="${P.recFresh ? 'on' : ''}">➕ Nouvelle piste</button></div>
       <p class="sh-p" style="font-size:13px;margin:0 0 8px;color:var(--yellow);font-weight:700">👇 Touche l'instrument pour lancer la prise</p><div class="reclist">`;
+    h += `<button class="recitem" data-practice="1" style="border-color:var(--cyan)"><span class="ae">🎯</span><span><b>S'entraîner sans enregistrer</b><small>Tout tourne en boucle avec ton clic${cur === 'hp' ? ' et toi dans les écouteurs' : ''}</small></span></button>`;
     if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
     ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s2]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s2}</small></span></button>`; });
     h += `</div><button class="btn ghost full" id="recSet">⚙️ Réglages des prises</button>`;
@@ -535,6 +536,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       txt(); b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { P.recMode = x.dataset.rm; P.headphones = P.recMode === 'hp'; b.querySelectorAll('[data-rm]').forEach(y => y.classList.toggle('on', y === x)); txt(); save(); });
       b.querySelectorAll('#rcFresh [data-f]').forEach(x => x.onclick = () => { P.recFresh = x.dataset.f === '1'; b.querySelectorAll('#rcFresh [data-f]').forEach(y => y.classList.toggle('on', y === x)); save(); const l = b.querySelector('.reclist'); l.classList.remove('nudge'); void l.offsetWidth; l.classList.add('nudge'); });
       b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k, null, null, P.recFresh));
+      b.querySelector('[data-practice]').onclick = () => startPractice();
       const rd = b.querySelector('[data-redo]'); if (rd) rd.onclick = () => quickRec(lr.type, lr.bar, lr.clip);
       b.querySelector('#recSet').onclick = () => openRecSheet((lr && lr.type) || 'guitare');
     });
@@ -598,6 +600,38 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     AC.resume(); if (!(await needMic())) return; closeSheet();
     const pr = P.recPrefs || { len: 0, countIn: true }; startRec(type, startBar == null ? P.cursor : startBar, pr.countIn !== false, pr.len || 0, replace, fresh);
   }
+  /* ---------- entraînement : on joue tout, avec le clic et le retour, sans rien enregistrer ---------- */
+  let practice = null;
+  async function startPractice() {
+    if (wantsFast()) setLatency('fast');
+    AC.resume(); if (!(await needMic())) return; closeSheet(); if (AC.state !== 'running') await AC.resume();
+    stop(); keepAwake(true);
+    const pr = P.recPrefs || { len: 0, countIn: true }, mode = P.recMode || (P.headphones ? 'hp' : 'soft'), from = P.cursor;
+    if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
+    player.start(from, { countIn: pr.countIn !== false, practice: true, quiet: mode === 'click' });
+    if (mode === 'hp' && P.monitor !== false) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
+    practice = { from, countIn: pr.countIn !== false, mode };
+    $('recPanel').hidden = false; $('recPanel').classList.add('practice');
+    $('rpCancel').textContent = 'Arrêter'; $('rpStop').textContent = '● Enregistrer';
+    monBtn(mode); updatePlayBtn();
+  }
+  function endPractice(keepMic) {
+    if (!practice) return; practice = null; player.stop(); restoreVol();
+    Mic.monitor(false); if (!keepMic) Mic.release(); keepAwake(false);
+    $('recPanel').hidden = true; $('recPanel').classList.remove('practice');
+    $('rpCancel').textContent = 'Annuler'; $('rpStop').textContent = '■ Stop'; updatePlayBtn();
+  }
+  function practiceFrame() {
+    const now = AC.currentTime, s = player.songStart, beat = stepDur() * 4, cnt = $('rpCount');
+    if (now < s) { cnt.textContent = practice.countIn ? Math.max(1, 4 - Math.floor((now - player.countInStart) / beat)) : '…'; cnt.classList.remove('live'); $('rpTitle').textContent = '🎯 Entraînement'; $('rpSub').textContent = 'Rien n\'est enregistré'; }
+    else { const span = Math.max(1, P.bars - practice.from), bar = practice.from + Math.floor((now - s) / barDur()) % span + 1; cnt.textContent = '🎯'; cnt.classList.remove('live'); $('rpTitle').textContent = 'Entraînement · mesure ' + bar; $('rpSub').textContent = 'Ça tourne en boucle, rien n\'est enregistré'; }
+    const lv = Mic.level(); const m = $('rpLevel'); m.style.width = Math.min(100, Math.sqrt(lv) * 160) + '%'; m.classList.toggle('hot', Mic.peak > .95);
+  }
+  function monBtn(mode) {
+    const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const lat = NATIVE ? Math.round(window.LaboNative.latencyMs()) : Math.round(((AC.baseLatency || 0) + (AC.outputLatency || 0)) * 1000);
+    const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI' + (lat ? (NATIVE ? ' · moteur natif ~' : ' · retard téléphone ~') + lat + ' ms' : '') + ' (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
+    rm.onclick = () => { if (Mic.mon) { Mic.monitor(false); P.monitor = false; } else { Mic.monitor(true, P.monVol == null ? .9 : P.monVol); P.monitor = true; } save(); upd(); };
+  }
   function startRec(type, startBar, countIn, len, replace, fresh) {
     stop(); keepAwake(true); Mic.start();
     if (len) while (P.bars < startBar + len) { P.bars++; P.drumBars.push('A'); }
@@ -622,8 +656,9 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     if (hot && now >= s) $('rpSub').textContent = '⚠️ Trop fort, recule un peu';
   }
   const restoreVol = () => E.master.gain.setTargetAtTime(.9, AC.currentTime, .05);
-  $('rpCancel').onclick = () => { if (!recState) return; player.stop(); restoreVol(); Mic.stop(); keepAwake(false); recState = null; $('recPanel').hidden = true; updatePlayBtn(); renderTimeline(); toast('Prise annulée'); };
+  $('rpCancel').onclick = () => { if (practice) { endPractice(false); toast('🎯 Entraînement terminé'); return; } if (!recState) return; player.stop(); restoreVol(); Mic.stop(); keepAwake(false); recState = null; $('recPanel').hidden = true; updatePlayBtn(); renderTimeline(); toast('Prise annulée'); };
   $('rpStop').onclick = async () => {
+    if (practice) { endPractice(true); openRecMenu(false); return; }
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;

@@ -246,3 +246,6 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .addtr .newtr .tn{white-space:normal;line-height:1.15;font-size:12px}
 @keyframes nudge{0%,100%{transform:none}25%{transform:translateY(-6px)}55%{transform:translateY(3px)}}
 .reclist.nudge .recitem:not([data-redo]){animation:nudge .5s ease 2;border-color:var(--yellow)}
+#recPanel.practice .rp-in{background:var(--cyan);color:var(--ink);border-color:var(--ink)}
+#recPanel.practice .rp-in .btn-ghost{color:var(--ink);border-color:var(--ink)}
+#recPanel.practice .btn-stop{background:var(--red);color:var(--cream)}

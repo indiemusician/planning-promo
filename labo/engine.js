@@ -220,6 +220,7 @@
         if (this.opt.preview) continue;
         if (this.step >= p.bars * 16) {
           if (this.opt.recording && this.h.extend) this.h.extend();
+          else if (this.opt.practice) { this.step = this.fromBar * 16; }
           else if (p.loop) { this.step = (p.loopFrom || 0) * 16; }
           else this.endAt = this.nextTime;
         }
@@ -227,7 +228,7 @@
       /* les blocs qui démarrent un poil avant la mesure (première note gardée) sont programmés plus tôt */
       if (!this.opt.preview && !this.endAt && this.step % 16 !== 0) {
         const toBar = 16 - (this.step % 16), bt = this.nextTime + toBar * this.stepDur(); let b = (this.step + toBar) / 16;
-        if (b >= p.bars) b = (p.loop && !this.opt.recording) ? (p.loopFrom || 0) : -1;
+        if (b >= p.bars) b = this.opt.practice ? this.fromBar : (p.loop && !this.opt.recording) ? (p.loopFrom || 0) : -1;
         const key = Math.round(bt * 100);
         if (b >= 0 && bt - .6 < ac.currentTime + (window.LABO_LOOK || .15) && !this.early.has(key)) { this.early.add(key); this.bar(p, b, bt, false); }
       }
@@ -237,7 +238,7 @@
       const E = this.E, st = s % 16;
       if (this.opt.preview) { const pat = p.patterns[this.opt.preview] || p.patterns.A; this.drums(p, pat, st, t, false); return; }
       const bar = Math.floor(s / 16);
-      if (!this.opt.export && !this.opt.quiet && (p.metro || (this.opt.recording && p.metroRec)) && st % 4 === 0) E.click(t, st === 0, 1, st / 4);
+      if (!this.opt.export && !this.opt.quiet && (p.metro || ((this.opt.recording || this.opt.practice) && p.metroRec)) && st % 4 === 0) E.click(t, st === 0, 1, st / 4);
       if (this.opt.quiet) { if (st % 4 === 0) E.click(t, st === 0, .45, st / 4); return; }
       const v = p.drumBars[bar] || 'A';
       if (v !== '-') {
