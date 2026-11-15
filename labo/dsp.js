@@ -359,9 +359,10 @@
 
   /* ---------- recalage automatique d'une prise sur la grille du tempo ----------
      renvoie le décalage d (s) à retirer au début : la prise arrive en retard de d */
-  DSP.alignToGrid = function (x, sr, beatDur, maxBars) {
-    const lim = Math.min(x.length, Math.floor(beatDur * 4 * (maxBars || 8) * sr) + sr);
-    const on = DSP.onsets(x.subarray(0, lim), sr).filter(o => o.w > .18); if (on.length < 4) return null;
+  DSP.alignToGrid = function (x, sr, beatDur, maxBars, minD, origin) {
+    minD = minD == null ? -.06 : minD; origin = origin || 0;
+    const lim = Math.min(x.length, Math.floor((origin + beatDur * 4 * (maxBars || 8)) * sr) + sr);
+    const on = DSP.onsets(x.subarray(0, lim), sr).filter(o => o.w > .18).map(o => ({ t: o.t - origin, w: o.w })).filter(o => o.t > minD - .05); if (on.length < 4) return null;
     const q = beatDur / 2, sig = .022;
     const score = d => { let s = 0; on.forEach(o => { const t = o.t - d; if (t < -q / 2) return; const k = Math.round(t / q), dist = t - k * q; const wgt = k % 8 === 0 ? 3 : k % 2 === 0 ? 2 : 1; s += o.w * wgt * Math.exp(-(dist * dist) / (2 * sig * sig)); }); return s; };
     /* indice fort : on commence presque toujours à jouer sur un temps fort (début de mesure) */
@@ -369,7 +370,7 @@
     const firstBonus = d => { const t = first.t - d; if (t < -.03) return 0; const dist = t - Math.round(t / bar) * bar; return Math.exp(-(dist * dist) / (2 * .03 * .03)); };
     const total = d => score(d) * (1 - .08 * Math.max(0, d)) * (1 + .6 * firstBonus(d));
     let best = 0, bs = total(0);
-    for (let d = -.06; d <= .85; d += .004) { const sc = total(d); if (sc > bs) { bs = sc; best = d; } }
+    for (let d = minD; d <= .85; d += .004) { const sc = total(d) * (d < 0 ? 1 + .25 * d : 1); if (sc > bs) { bs = sc; best = d; } }
     const s0 = total(0);
     return { d: best, gain: s0 > 0 ? bs / s0 : 9, n: on.length };
   };

@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 15;
+  const VERSION = 16;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } DB.put('kv', 'device', DEV); };
@@ -237,7 +237,7 @@ registerProcessor('labo-cap',Cap);`;
     if (!c) return; const a = AUD[c.audioId]; if (!a) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1); const repW = c.lenBars * BW, loops = c.loops || 1;
     cv.width = repW * loops * dpr; cv.height = 50 * dpr; const g = cv.getContext('2d'); g.fillStyle = 'rgba(7,10,31,.65)';
-    const spb = barDur() * a.sr, base = Math.floor((c.inBars || 0) * spb), total = Math.min(a.data.length, base + Math.floor(c.lenBars * spb)); const cols = Math.floor(repW * dpr / 2);
+    const spb = barDur() * a.sr, base = Math.floor(((c.pre || 0) + (c.inBars || 0) * barDur()) * a.sr), total = Math.min(a.data.length, base + Math.floor(c.lenBars * spb)); const cols = Math.floor(repW * dpr / 2);
     const peaks = []; let mx = 1e-4;
     for (let i = 0; i < cols; i++) { const s0 = base + Math.floor(i / cols * c.lenBars * spb), s1 = Math.min(total, base + Math.floor((i + 1) / cols * c.lenBars * spb)); let m = 0; for (let j = s0; j < s1; j += 8) { const v = Math.abs(a.data[j]); if (v > m) m = v; } peaks.push(m); if (m > mx) mx = m; }
     for (let r = 0; r < loops; r++) peaks.forEach((m, i) => { const hh = Math.max(1, m / mx * 18 * dpr); g.fillRect(r * repW * dpr + i * 2, cv.height / 2 + 4 * dpr - hh, 1.4 * dpr, hh * 2); });
@@ -371,8 +371,8 @@ registerProcessor('labo-cap',Cap);`;
   function guitarClips() { return P.clips.filter(c => { const t = P.tracks.find(x => x.id === c.trackId); return t && t.type === 'guitare' && c.kind === 'audio'; }); }
   function listen(c) {
     const a = AUD[c.audioId]; if (!a) return null;
-    const k = [P.bpm, c.nudge || 0, c.lenBars, c.inBars || 0].join('_'); if (a.listen && a.listenKey === k) return a.listen;
-    const sh = Math.round(((c.inBars || 0) * barDur() - (c.nudge || 0) / 1000) * a.sr); let x;
+    const k = [P.bpm, c.nudge || 0, c.lenBars, c.inBars || 0, c.pre || 0].join('_'); if (a.listen && a.listenKey === k) return a.listen;
+    const sh = Math.round(((c.pre || 0) + (c.inBars || 0) * barDur() - (c.nudge || 0) / 1000) * a.sr); let x;
     if (sh >= 0) x = a.data.subarray(sh); else { x = new Float32Array(a.data.length - sh); x.set(a.data, -sh); }
     const sd = stepDur(), n = c.lenBars * 16;
     const h = DSP.analyzeHarmony(x, a.sr, sd * 4, c.lenBars * 4);
@@ -484,20 +484,28 @@ registerProcessor('labo-cap',Cap);`;
   ];
   $('beatBtn').onclick = () => { AC.resume(); openBeatSheet(); };
   $('recBtn').onclick = () => {
-    AC.resume(); let h = `<div class="sh-t"><span class="em">🔴</span>Qu'est-ce qu'on enregistre ?</div><div class="reclist">`;
-    ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s}</small></span></button>`; });
-    openSheet(h + '</div>', b => b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => openRecSheet(x.dataset.k)));
-  };
+    AC.resume(); const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs', soft: '🔈 batterie douce', click: '🔔 clic' }[P.recMode || 'soft'];
+    const lr = P.lastRec && P.clips.find(c => c.id === P.lastRec.clip) ? P.lastRec : null;
+    let h = `<div class="sh-t"><span class="em">🔴</span>On enregistre quoi ?</div><p class="sh-p" style="font-size:12.5px;margin-bottom:10px">Touche et c'est parti, à partir de la mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'} · ${mode}.</p><div class="reclist">`;
+    if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
+    ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s2]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s2}</small></span></button>`; });
+    h += `</div><button class="btn ghost full" id="recSet">⚙️ Réglages des prises</button>`;
+    openSheet(h, b => {
+      b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k));
+      const rd = b.querySelector('[data-redo]'); if (rd) rd.onclick = () => quickRec(lr.type, lr.bar, lr.clip);
+      b.querySelector('#recSet').onclick = () => openRecSheet((lr && lr.type) || 'guitare');
+    });
+  };;
 
   /* ---------- enregistrement ---------- */
   let recState = null;
   function openRecSheet(type) {
     const T = TYPES[type]; const sing = T.kind === 'inst';
-    let start = P.cursor, countIn = true, len = 0;
+    P.recPrefs = P.recPrefs || { len: 0, countIn: true }; let start = P.cursor, countIn = P.recPrefs.countIn !== false, len = P.recPrefs.len || 0;
     const desc = sing ? `Chante ou fredonne ta ligne (« dou dou », « na na »…). Le labo repère tes notes, les cale sur le tempo et la gamme, et les joue au ${T.name.toLowerCase()}.` :
       type === 'voix' ? 'Chante sur la batterie. L\'écho malin et la réverb sont déjà branchés, tu pourras changer les effets après.' : 'Joue ton riff sur la batterie. Tu pourras le boucler ensuite pour l\'allonger autant que tu veux.';
     openSheet(`<div class="sh-t"><span class="em">${T.em}</span>${sing ? 'Chante → ' + T.name : T.name}</div><p class="sh-p">${desc}</p>
-      <div class="blk"><label>Combien de temps ?</label><div class="chips" id="rsLen">${[[0, '∞ Libre'], [1, '1 mes.'], [2, '2'], [4, '4'], [8, '8'], [16, '16']].map(([v, l]) => `<button class="chip ${v === 0 ? 'on' : ''}" data-l="${v}">${l}</button>`).join('')}</div><p class="sh-p" id="rsLenTxt" style="font-size:13px;margin:10px 0 0"><b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.</p></div>
+      <div class="blk"><label>Combien de temps ?</label><div class="chips" id="rsLen">${[[0, '∞ Libre'], [1, '1 mes.'], [2, '2'], [4, '4'], [8, '8'], [16, '16']].map(([v, l]) => `<button class="chip ${v === (P.recPrefs.len || 0) ? 'on' : ''}" data-l="${v}">${l}</button>`).join('')}</div><p class="sh-p" id="rsLenTxt" style="font-size:13px;margin:10px 0 0"><b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.</p></div>
       <div class="blk"><div class="row"><span style="font-weight:700;font-size:14.5px">Ça démarre<small style="display:block;font-weight:500;font-size:12px;opacity:.65;margin-top:2px">Change-le pour ajouter une partie plus loin</small></span><div class="stepper" style="gap:8px"><button data-d="-1" style="width:36px;height:36px;font-size:18px">−</button><b id="rsBar" style="font-size:15px;min-width:76px"></b><button data-d="1" style="width:36px;height:36px;font-size:18px">+</button></div></div></div>
       <div class="blk"><label>Pendant la prise, j'entends…</label><div class="reclist" id="rsMode">
         <button class="recitem" data-m="hp"><span class="ae">🎧</span><span><b>Toute la batterie dans mes écouteurs</b><small>Filaires ou Bluetooth. Le son le plus propre.</small></span></button>
@@ -505,12 +513,12 @@ registerProcessor('labo-cap',Cap);`;
         <button class="recitem" data-m="click"><span class="ae">🔔</span><span><b>Juste le clic</b><small>Sans écouteurs, la prise la plus propre.</small></span></button>
       </div>
         <div id="rsSync" class="row" style="margin-top:4px"></div></div>
-      <div class="blk">${clickChips()}<div class="tog" style="margin-top:6px">Décompte d'une mesure<span class="sw on" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
+      <div class="blk">${clickChips()}<div class="tog" style="margin-top:6px">Décompte d'une mesure<span class="sw ${countIn ? 'on' : ''}" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
       <p class="sh-p" style="font-size:12.5px">Évite les écouteurs Bluetooth : dès que le micro s'ouvre, le téléphone les passe en qualité « appel » et le son se dégrade. Et ferme les autres applis qui enregistrent (dictaphone…).</p>
       <button class="btn red full" id="rsGo" style="font-family:Bungee;font-size:18px">● C'est parti</button>`, b => {
       const upd = () => b.querySelector('#rsBar').textContent = start === 0 ? 'au début' : 'mesure ' + (start + 1);
       upd(); b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { start = Math.max(0, Math.min(P.bars - 1, start + +x.dataset.d)); upd(); });
-      b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { len = +x.dataset.l; b.querySelectorAll('[data-l]').forEach(y => y.classList.toggle('on', y === x)); b.querySelector('#rsLenTxt').innerHTML = len ? 'La prise s\'arrête toute seule après <b>' + len + ' mesure' + (len > 1 ? 's' : '') + '</b>, pile sur le temps. Pratique pour une boucle bien nette.' : '<b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.'; });
+      b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { len = +x.dataset.l; P.recPrefs.len = len; save(); b.querySelectorAll('[data-l]').forEach(y => y.classList.toggle('on', y === x)); b.querySelector('#rsLenTxt').innerHTML = len ? 'La prise s\'arrête toute seule après <b>' + len + ' mesure' + (len > 1 ? 's' : '') + '</b>, pile sur le temps. Pratique pour une boucle bien nette.' : '<b>Libre</b> : tu joues ton truc et tu appuies sur <b>Stop</b> quand tu as fini. Pas de limite.'; });
       const hpTxt = () => {
         P.recMode = P.recMode || (P.headphones ? 'hp' : 'soft'); P.headphones = P.recMode === 'hp';
         b.querySelectorAll('[data-m]').forEach(x => { const on = x.dataset.m === P.recMode; x.style.background = on ? 'var(--yellow)' : ''; x.style.color = on ? 'var(--ink)' : ''; x.style.borderColor = on ? 'var(--ink)' : ''; });
@@ -520,18 +528,22 @@ registerProcessor('labo-cap',Cap);`;
       };
       bindClickChips(b, () => openRecSheet(type));
       hpTxt(); b.querySelectorAll('[data-m]').forEach(x => x.onclick = () => { P.recMode = x.dataset.m; hpTxt(); save(); });
-      b.querySelector('#rsCount').onclick = e => { countIn = !countIn; e.target.classList.toggle('on', countIn); };
+      b.querySelector('#rsCount').onclick = e => { countIn = !countIn; P.recPrefs.countIn = countIn; save(); e.target.classList.toggle('on', countIn); };
       b.querySelector('#rsMetro').onclick = e => { P.metroRec = !P.metroRec; e.target.classList.toggle('on', P.metroRec); save(); };
       b.querySelector('#rsGo').onclick = async () => { AC.resume(); if (!(await needMic())) return; closeSheet(); startRec(type, start, countIn, len); };
     });
   }
-  function startRec(type, startBar, countIn, len) {
+  async function quickRec(type, startBar, replace) {
+    AC.resume(); if (!(await needMic())) return; closeSheet();
+    const pr = P.recPrefs || { len: 0, countIn: true }; startRec(type, startBar == null ? P.cursor : startBar, pr.countIn !== false, pr.len || 0, replace);
+  }
+  function startRec(type, startBar, countIn, len, replace) {
     stop(); keepAwake(true); Mic.start();
     if (len) while (P.bars < startBar + len) { P.bars++; P.drumBars.push('A'); }
     const mode = P.recMode || (P.headphones ? 'hp' : 'soft');
     if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
     player.start(startBar, { countIn, recording: true, quiet: mode === 'click' });
-    recState = { type, startBar, countIn, len }; updatePlayBtn();
+    recState = { type, startBar, countIn, len, replace }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
   }
   function recFrame() {
@@ -551,23 +563,24 @@ registerProcessor('labo-cap',Cap);`;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
     const lat = ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006)) + (DEV.inLat || 0);
-    let s0 = Math.round((songStart - rec.t0 + lat) * sr);
+    /* on garde 0,5 s de marge avant le premier temps : rien n'est jamais mangé, le calage se fait sans couper */
+    const isAudio = TYPES[st.type].kind === 'audio', PRE = isAudio ? .5 : 0;
+    let s0 = Math.round((songStart - rec.t0 + lat - PRE) * sr);
     let x;
     if (s0 >= 0) x = rec.data.slice(s0); else { x = new Float32Array(rec.data.length - s0); x.set(rec.data, -s0); }
-    /* recalage auto : on cale les attaques de la prise sur la grille du tempo, et le labo apprend le retard du téléphone */
-    let alignMsg = '';
-    if (P.autoAlign !== false && TYPES[st.type].kind === 'audio') {
-      const al = DSP.alignToGrid(x, sr, stepDur() * 4, 8);
+    let pre = PRE, alignMsg = '';
+    if (isAudio && P.autoAlign !== false) {
+      const al = DSP.alignToGrid(x, sr, stepDur() * 4, 8, -.35, PRE);
       if (al && Math.abs(al.d) > .025 && al.gain > 1.2) {
-        const k = Math.round(al.d * sr); if (k > 0) x = x.slice(k); else { const y = new Float32Array(x.length - k); y.set(x, -k); x = y; }
-        DEV.inHist = (DEV.inHist || []).concat([(DEV.inLat || 0) + al.d]).slice(-5); DEV.inLat = Math.max(-.1, Math.min(.8, DSP.median(DEV.inHist))); saveDev();
+        pre = Math.max(0, PRE + al.d);
+        DEV.inHist = (DEV.inHist || []).concat([(DEV.inLat || 0) + al.d]).slice(-5); DEV.inLat = Math.max(-.2, Math.min(.6, DSP.median(DEV.inHist))); saveDev();
         alignMsg = ' · recalée de ' + Math.round(al.d * 1000) + ' ms';
       }
     }
-    const dur = x.length / sr;
+    const dur = x.length / sr - pre;
     if (dur < .6) { toast('Prise trop courte, réessaie'); renderTimeline(); return; }
     const lenBars = st.len || Math.max(1, Math.round(dur / barDur()));
-    x = x.slice(0, Math.min(x.length, Math.floor((lenBars * barDur() + .4) * sr)));
+    x = x.slice(0, Math.min(x.length, Math.floor((pre + lenBars * barDur() + .4) * sr)));
     while (P.bars < st.startBar + lenBars) { P.bars++; P.drumBars.push('A'); }
     const T = TYPES[st.type];
     const cl = cleanTake(x, sr);
@@ -575,14 +588,15 @@ registerProcessor('labo-cap',Cap);`;
     const audioId = addAudio(x, sr);
     if (cl.clipped) setTimeout(() => toast('⚠️ Ta prise sature un peu : éloigne le téléphone de la guitare ou chante moins près'), 3200);
     if (T.kind === 'audio') {
-      const t = trackFor(st.type, st.startBar, lenBars);
-      P.clips.push({ id: uid(), kind: 'audio', trackId: t.id, bar: st.startBar, lenBars, loops: 1, audioId, nudge: 0 });
-      commit(T.em + ' ' + T.name + ' enregistrée · ' + lenBars + ' mesure' + (lenBars > 1 ? 's' : '') + alignMsg + (st.type === 'voix' ? ' · écho malin activé' : ''), true);
+      let tid = null; if (st.replace) { const old = P.clips.find(c => c.id === st.replace); if (old) { tid = old.trackId; P.clips = P.clips.filter(c => c.id !== old.id); } }
+      const t = tid ? P.tracks.find(x => x.id === tid) : trackFor(st.type, st.startBar, lenBars);
+      P.clips.push({ id: uid(), kind: 'audio', trackId: t.id, bar: st.startBar, lenBars, loops: 1, audioId, nudge: 0, pre: +pre.toFixed(4) });
+      P.lastRec = { type: st.type, bar: st.startBar, clip: P.clips[P.clips.length - 1].id };
+      commit(T.em + ' ' + T.name + ' enregistrée · ' + lenBars + ' mesure' + (lenBars > 1 ? 's' : '') + alignMsg + (st.type === 'voix' ? ' · écho malin activé' : '') + ' · appui long pour l\'éditer', true);
       if (P.tracks.find(t => t.id === P.clips[P.clips.length - 1].trackId).fx.autotune) tunedBuf(audioId);
-      setTimeout(() => openClipSheet(P.clips[P.clips.length - 1].id, true), 350);
     } else {
       busy(true, 'J\'écoute tes notes…');
-      later(() => { const r = voiceToInst(audioId, st.type, st.startBar, lenBars); busy(false); if (r) autoplay(); });
+      later(() => { if (st.replace) P.clips = P.clips.filter(c => c.id !== st.replace); const r = voiceToInst(audioId, st.type, st.startBar, lenBars); busy(false); if (r) { P.lastRec = { type: st.type, bar: st.startBar, clip: P.clips[P.clips.length - 1].id }; save(); autoplay(); } });
     }
   };
   function voiceToInst(audioId, type, bar, lenBars, loops) {
@@ -687,7 +701,7 @@ registerProcessor('labo-cap',Cap);`;
         if (a === 'dup') { snap(); const n = clone(c); n.id = uid(); n.bar = c.bar + c.lenBars * (c.loops || 1); const tt = trackFor(t.type, n.bar, n.lenBars * (n.loops || 1)); n.trackId = tt.id; P.clips.push(n); const need = n.bar + n.lenBars * (n.loops || 1); while (P.bars < need) { P.bars++; P.drumBars.push('A'); } closeSheet(); commit('⧉ Bloc dupliqué', true); }
         if (a === 'pl') { closeSheet(); play(c.bar); }
         if (a === 'edit') { openEditor(c.id); }
-        if (a === 'auto') { const au = AUD[c.audioId]; const st0 = Math.round(((c.inBars || 0) * barDur()) * au.sr); const al = DSP.alignToGrid(au.data.subarray(st0), au.sr, stepDur() * 4, 8); if (!al || al.gain < 1.05) { toast('Ta prise est déjà bien calée 👌'); return; } snap(); c.nudge = Math.round(-al.d * 1000); const n = b.querySelector('#csN'); if (n) { n.value = c.nudge; b.querySelector('#csNudge').textContent = c.nudge + ' ms'; } save(); toast('⏱️ Recalée de ' + Math.round(al.d * 1000) + ' ms', undo); }
+        if (a === 'auto') { const au = AUD[c.audioId]; const st0 = Math.round(((c.pre || 0) + (c.inBars || 0) * barDur() - (c.nudge || 0) / 1000) * au.sr); const org = Math.min(.35, Math.max(0, st0 / au.sr)); const al = DSP.alignToGrid(au.data.subarray(Math.max(0, st0 - Math.round(org * au.sr))), au.sr, stepDur() * 4, 8, -org, org); if (!al || al.gain < 1.05 || Math.abs(al.d) < .015) { toast('Ta prise est déjà bien calée 👌'); return; } snap(); const np = (c.pre || 0) - (c.nudge || 0) / 1000 + al.d; c.pre = Math.max(0, np); c.nudge = np < 0 ? Math.round(-np * 1000) : 0; const n = b.querySelector('#csN'); if (n) { n.value = c.nudge; b.querySelector('#csNudge').textContent = c.nudge + ' ms'; } save(); toast('⏱️ Recalée de ' + Math.round(al.d * 1000) + ' ms', undo); }
         if (a === 'raw') { stop(); const bf = audioBuf(c.audioId); if (!bf) return; if (window._raw) { try { window._raw.stop(); } catch (e) { } } const src = AC.createBufferSource(); src.buffer = bf; src.connect(AC.destination); src.start(); window._raw = src; x.textContent = '■ Arrêter'; src.onended = () => { x.textContent = '🎧 Écouter la prise seule, sans rien'; }; x.onclick = () => { try { src.stop(); } catch (e) { } }; }
         if (a === 'del') { snap(); P.clips = P.clips.filter(x => x.id !== c.id); closeSheet(); commit('Bloc supprimé', true); }
         if (a === 'ab') { closeSheet(); autoBass(); }
@@ -721,7 +735,7 @@ registerProcessor('labo-cap',Cap);`;
     const c = P.clips.find(x => x.id === id); if (!c) return; const t = P.tracks.find(x => x.id === c.trackId);
     stop(); snap();
     const bd = barDur(), beatS = bd / 4, a = c.kind === 'audio' ? AUD[c.audioId] : null;
-    const srcBars = c.kind === 'audio' ? Math.max(1, Math.ceil(a.data.length / a.sr / bd - .05)) : (c.srcBars = c.srcBars || Math.max((c.inBars || 0) + c.lenBars, Math.ceil(Math.max(0, ...(c.notes || []).map(n => n.s + n.l)) / 16)));
+    const pre0 = c.kind === 'audio' ? (c.pre || 0) : 0; const srcBars = c.kind === 'audio' ? Math.max(1, Math.ceil((a.data.length / a.sr - pre0) / bd - .05)) : (c.srcBars = c.srcBars || Math.max((c.inBars || 0) + c.lenBars, Math.ceil(Math.max(0, ...(c.notes || []).map(n => n.s + n.l)) / 16)));
     const SB = srcBars * 4; let vA = 0, vB = SB, tool = 'trim', cut = null, grid = P.edGrid || 1, lastBuzz = null;
     const GRIDS = [[4, 'Mesure'], [1, 'Temps'], [.5, '½ temps'], [.25, '¼'], [0, 'Libre']];
     const buzz = k => { if (k !== lastBuzz && navigator.vibrate) navigator.vibrate(6); lastBuzz = k; };
@@ -749,7 +763,7 @@ registerProcessor('labo-cap',Cap);`;
           if (isBar && (pxBeat * 4 > 22 || (x / 4) % 2 === 0)) { g.fillStyle = 'rgba(246,236,214,.6)'; g.font = '700 10px Space Grotesk, sans-serif'; g.fillText(String(x / 4 + 1), px + 3, 13); }
         }
         g.fillStyle = t.color; const mid = TOP + (H - TOP) / 2;
-        if (a) { const cols = Math.floor(w - 2 * PAD); let mx = 1e-4; const pk = new Float32Array(cols); for (let i = 0; i < cols; i++) { const s0 = Math.floor((vA + i / cols * (vB - vA)) * beatS * a.sr), s1 = Math.min(a.data.length, Math.floor((vA + (i + 1) / cols * (vB - vA)) * beatS * a.sr)); const st = Math.max(1, Math.floor((s1 - s0) / 300)); let m = 0; for (let j = Math.max(0, s0); j < s1; j += st) { const v = Math.abs(a.data[j]); if (v > m) m = v; } pk[i] = m; if (m > mx) mx = m; } if (!a.edMax) { let gm = 1e-4; for (let j = 0; j < a.data.length; j += 16) gm = Math.max(gm, Math.abs(a.data[j])); a.edMax = gm; } for (let i = 0; i < cols; i++) { const hh = Math.max(.8, pk[i] / a.edMax * (H - TOP - 26) / 2); g.fillRect(PAD + i, mid - hh, 1, hh * 2); } }
+        if (a) { const cols = Math.floor(w - 2 * PAD); let mx = 1e-4; const pk = new Float32Array(cols); for (let i = 0; i < cols; i++) { const s0 = Math.floor((pre0 + (vA + i / cols * (vB - vA)) * beatS) * a.sr), s1 = Math.min(a.data.length, Math.floor((pre0 + (vA + (i + 1) / cols * (vB - vA)) * beatS) * a.sr)); const st = Math.max(1, Math.floor((s1 - s0) / 300)); let m = 0; for (let j = Math.max(0, s0); j < s1; j += st) { const v = Math.abs(a.data[j]); if (v > m) m = v; } pk[i] = m; if (m > mx) mx = m; } if (!a.edMax) { let gm = 1e-4; for (let j = 0; j < a.data.length; j += 16) gm = Math.max(gm, Math.abs(a.data[j])); a.edMax = gm; } for (let i = 0; i < cols; i++) { const hh = Math.max(.8, pk[i] / a.edMax * (H - TOP - 26) / 2); g.fillRect(PAD + i, mid - hh, 1, hh * 2); } }
         else { const ns = c.notes || []; let lo = 127, hi = 0; ns.forEach(n => { lo = Math.min(lo, n.m); hi = Math.max(hi, n.m); }); const rng = Math.max(8, hi - lo + 2); ns.forEach(n => { const x0 = xOf(n.s / 4), x1 = xOf((n.s + n.l) / 4); if (x1 < 0 || x0 > w) return; const y = H - 14 - (n.m - lo + 1) / rng * (H - TOP - 30); g.fillRect(x0, y, Math.max(3, x1 - x0 - 1), 7); }); }
         g.fillStyle = 'rgba(7,10,31,.74)'; g.fillRect(0, TOP, Math.max(0, xOf(S)), H); g.fillRect(xOf(Eb), TOP, w, H);
         (c.mutes || []).forEach(([m0, m1]) => { const x0 = xOf(inB + m0), x1 = xOf(inB + m1); g.save(); g.beginPath(); g.rect(x0, TOP, x1 - x0, H); g.clip(); g.fillStyle = 'rgba(7,10,31,.5)'; g.fillRect(x0, TOP, x1 - x0, H); g.strokeStyle = 'rgba(239,59,74,.9)'; g.lineWidth = 3; for (let k = -H; k < x1 - x0 + H; k += 12) { g.beginPath(); g.moveTo(x0 + k, TOP); g.lineTo(x0 + k + H, H + TOP); g.stroke(); } g.restore(); });
@@ -964,7 +978,7 @@ registerProcessor('labo-cap',Cap);`;
         dots.innerHTML = '<i></i><i></i><i></i><i></i>'; dots.querySelectorAll('i').forEach(i => { i.style.cssText = 'width:16px;height:16px;border-radius:50%;background:rgba(246,236,214,.2);display:block'; });
         const beat = 60 / 90, t0 = AC.currentTime + .4, words = (P.clickMode === 'en' || /one/i.test(P.countLang || '')) ? ['ONE', 'TWO', 'THREE', 'FOUR'] : ['UN', 'DEUX', 'TROIS', 'QUATRE'];
         const saved = E.clickMode; E.clickMode = 'clic'; for (let i = 0; i < 4; i++) E.click(t0 + i * beat, i === 0); E.clickMode = saved;
-        const recAt = t0 + 4 * beat - .05, endAt = t0 + 8 * beat + .5; let started = false, last = -1;
+        const recAt = t0 + 3 * beat + .14, endAt = t0 + 8 * beat + .5; let started = false, last = -1;
         const tick = () => {
           const now = AC.currentTime;
           if (!started && now >= recAt) { Mic.start(); started = true; }
@@ -976,7 +990,7 @@ registerProcessor('labo-cap',Cap);`;
             wd.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 160 });
           }
           if (now < endAt) { requestAnimationFrame(tick); return; }
-          Mic.stop().then(r => { busyRec = false; recBtn.disabled = false; recBtn.style.opacity = 1; recBtn.textContent = '● Recommencer'; big.style.display = 'none'; done(splitCount(r.data, r.sr) || beatSplit(r.data, r.sr, beat, .05 + (DEV.inLat || 0)), r.sr); });
+          Mic.stop().then(r => { busyRec = false; recBtn.disabled = false; recBtn.style.opacity = 1; recBtn.textContent = '● Recommencer'; big.style.display = 'none'; done(splitCount(r.data, r.sr) || beatSplit(r.data, r.sr, beat, beat - .14 + (DEV.inLat || 0)), r.sr); });
         };
         if (k0()) requestAnimationFrame(tick);
         function k0() { ph.textContent = 'Prépare-toi…'; wd.textContent = ''; return true; }

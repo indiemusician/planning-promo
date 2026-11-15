@@ -268,7 +268,7 @@
       const E = this.E, ac = E.ac, rep = c.lenBars * this.barDur(), dest = E.chain(tr).in;
       if (c.kind === 'audio') {
         const buf = this.h.buffer && this.h.buffer(c, tr); if (!buf) return;
-        const cin = (c.inBars || 0) * this.barDur();
+        const cin = (c.pre || 0) + (c.inBars || 0) * this.barDur();
         let when = t + (c.nudge || 0) / 1000, off = offset;
         if (when < t && offset === 0) { off += t - when; when = t; }
         if (when < ac.currentTime) { off += ac.currentTime - when; when = ac.currentTime; }
