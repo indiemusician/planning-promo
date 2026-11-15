@@ -238,3 +238,9 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .clip .mz{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(-45deg,rgba(7,10,31,.55) 0 5px,rgba(7,10,31,.35) 5px 10px);z-index:1;pointer-events:none}
 .rp-mon{grid-column:1/-1;padding:10px;border-radius:12px;background:rgba(7,10,31,.35);border:2px solid var(--cream);font-weight:700;font-size:14px;color:var(--cream)}
 .rp-mon.off{opacity:.6;border-style:dashed}
+
+.addtr .thd.newtr{background:var(--navy3);border:2px dashed rgba(246,236,214,.35);border-left:none;color:var(--yellow)}
+.addtr .thd.newtr::before{display:none}
+.addtr .tn{color:var(--yellow)}
+.lane.add{height:52px;background:repeating-linear-gradient(90deg,transparent 0 calc(var(--bw) - 1px),rgba(246,236,214,.06) calc(var(--bw) - 1px) var(--bw));opacity:.6}
+.addtr .newtr .tn{white-space:normal;line-height:1.15;font-size:12px}

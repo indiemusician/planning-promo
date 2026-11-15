@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 27;
+  const VERSION = 28;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -250,6 +250,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
         h += `</div></div>`;
       }
     });
+    h += `<div class="trow addtr"><button class="thd newtr" data-act="newtrack"><span class="te">➕</span><span class="tn">Nouvelle piste</span></button><div class="lane add" style="width:${P.bars * BW}px" data-act="newtrack"></div></div>`;
     h += `<div class="ph" id="ph" style="left:${HEAD + P.cursor * BW}px"></div>`;
     inner.innerHTML = h;
     inner.querySelectorAll('canvas[data-wave]').forEach(cv => drawWave(cv, P.clips.find(c => c.id === cv.dataset.wave)));
@@ -294,6 +295,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       const nv = P.drumBars[i]; toast({ A: 'Mesure ' + (i + 1) + ' : rythme A', B: 'Mesure ' + (i + 1) + ' : variation B', F: 'Mesure ' + (i + 1) + ' : roulement 🥁', '-': 'Mesure ' + (i + 1) + ' : silence' }[nv]);
     }
     else if (act === 'track') openTrackSheet(el.dataset.id);
+    else if (act === 'newtrack') openRecMenu(true);
     else if (act === 'clip') openClipSheet(el.dataset.id);
     else if (act === 'lane') { const r = el.getBoundingClientRect(); const b = Math.floor((e.clientX - r.left) / BW); if (b >= 0 && b < P.bars) { P.cursor = b; renderTimeline(); save(); } }
   });
@@ -494,9 +496,9 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       commit('🥁 Batterie calée sur ton grattage', true); autoplay();
     });
   }
-  function trackFor(type, bar, len) {
+  function trackFor(type, bar, len, fresh) {
     const T = TYPES[type];
-    let t = P.tracks.find(x => x.type === type && !trackClips(x).some(c => c.bar < bar + len && bar < c.bar + c.lenBars * (c.loops || 1)));
+    let t = fresh ? null : P.tracks.find(x => x.type === type && !trackClips(x).some(c => c.bar < bar + len && bar < c.bar + c.lenBars * (c.loops || 1)));
     if (!t) {
       const n = P.tracks.filter(x => x.type === type).length;
       t = { id: uid(), kind: T.kind, type, name: T.name + (n ? ' ' + (n + 1) : ''), em: T.em, color: T.color, inst: T.inst, vol: .85, fx: clone(T.fx) };
@@ -516,24 +518,27 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     ['cordes', '🎼', 'Chante des cordes', 'Une nappe douce']
   ];
   $('beatBtn').onclick = () => { AC.resume(); openBeatSheet(); };
-  $('recBtn').onclick = () => {
-    AC.resume(); const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs' + (P.monitor !== false ? ' + ta voix/guitare en retour' : ''), soft: '🔈 batterie douce', click: '🔔 clic seul, sans les autres pistes' }[P.recMode || 'soft'];
+  function openRecMenu(forceFresh) {
+    AC.resume(); if (forceFresh) P.recFresh = true; const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs' + (P.monitor !== false ? ' + ta voix/guitare en retour' : ''), soft: '🔈 batterie douce', click: '🔔 clic seul, sans les autres pistes' }[P.recMode || 'soft'];
     const lr = P.lastRec && P.clips.find(c => c.id === P.lastRec.clip) ? P.lastRec : null;
     const cur = P.recMode || 'soft';
     let h = `<div class="sh-t"><span class="em">🔴</span>On enregistre quoi ?</div>
       <div class="tabs" id="rcMode" style="margin-bottom:8px"><button data-rm="hp" class="${cur === 'hp' ? 'on' : ''}">🎧 Écouteurs</button><button data-rm="soft" class="${cur === 'soft' ? 'on' : ''}">🔈 Haut-parleur</button><button data-rm="click" class="${cur === 'click' ? 'on' : ''}">🔔 Clic</button></div>
-      <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:10px"></p><div class="reclist">`;
+      <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:8px"></p>
+      <button class="btn full ${P.recFresh ? 'yel' : 'ghost'}" id="rcFresh" style="margin-bottom:10px;justify-content:flex-start;gap:8px">${P.recFresh ? '➕ Sur une <b>nouvelle piste</b>, par-dessus le reste ✓' : '↪ Sur la piste existante (touche pour une nouvelle piste)'}</button><div class="reclist">`;
     if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
     ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s2]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s2}</small></span></button>`; });
     h += `</div><button class="btn ghost full" id="recSet">⚙️ Réglages des prises</button>`;
     openSheet(h, b => {
       const txt = () => { const m = P.recMode || 'soft'; b.querySelector('#rcTxt').innerHTML = (m === 'hp' ? 'Tu entends <b>toutes les pistes + toi en direct</b> dans tes écouteurs.' : m === 'soft' ? 'La batterie et les pistes passent <b>doucement sur le haut-parleur</b> (sans te réentendre, sinon larsen).' : 'Tu n\'entends <b>que le clic</b> : la prise la plus propre sans écouteurs.') + ` Départ mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'}.`; };
       txt(); b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { P.recMode = x.dataset.rm; P.headphones = P.recMode === 'hp'; b.querySelectorAll('[data-rm]').forEach(y => y.classList.toggle('on', y === x)); txt(); save(); });
-      b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k));
+      const fb = b.querySelector('#rcFresh'); fb.onclick = () => { P.recFresh = !P.recFresh; fb.className = 'btn full ' + (P.recFresh ? 'yel' : 'ghost'); fb.innerHTML = P.recFresh ? '➕ Sur une <b>nouvelle piste</b>, par-dessus le reste ✓' : '↪ Sur la piste existante (touche pour une nouvelle piste)'; save(); };
+      b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k, null, null, P.recFresh));
       const rd = b.querySelector('[data-redo]'); if (rd) rd.onclick = () => quickRec(lr.type, lr.bar, lr.clip);
       b.querySelector('#recSet').onclick = () => openRecSheet((lr && lr.type) || 'guitare');
     });
-  };;
+  }
+  $('recBtn').onclick = () => openRecMenu(false);
 
   /* ---------- enregistrement ---------- */
   let recState = null;
@@ -587,12 +592,12 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     setTimeout(() => { try { old.close(); } catch (e) { } }, 300);
   }
   const wantsFast = () => !NATIVE && (P.recMode === 'hp' && P.monitor !== false) || DEV.audioMode === 'fast';
-  async function quickRec(type, startBar, replace) {
+  async function quickRec(type, startBar, replace, fresh) {
     if (wantsFast()) setLatency('fast');
     AC.resume(); if (!(await needMic())) return; closeSheet();
-    const pr = P.recPrefs || { len: 0, countIn: true }; startRec(type, startBar == null ? P.cursor : startBar, pr.countIn !== false, pr.len || 0, replace);
+    const pr = P.recPrefs || { len: 0, countIn: true }; startRec(type, startBar == null ? P.cursor : startBar, pr.countIn !== false, pr.len || 0, replace, fresh);
   }
-  function startRec(type, startBar, countIn, len, replace) {
+  function startRec(type, startBar, countIn, len, replace, fresh) {
     stop(); keepAwake(true); Mic.start();
     if (len) while (P.bars < startBar + len) { P.bars++; P.drumBars.push('A'); }
     const mode = P.recMode || (P.headphones ? 'hp' : 'soft');
@@ -602,7 +607,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const lat = NATIVE ? Math.round(window.LaboNative.latencyMs()) : Math.round(((AC.baseLatency || 0) + (AC.outputLatency || 0)) * 1000);
     const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI' + (lat ? (NATIVE ? ' · moteur natif ~' : ' · retard téléphone ~') + lat + ' ms' : '') + ' (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
     rm.onclick = () => { if (Mic.mon) { Mic.monitor(false); P.monitor = false; } else { Mic.monitor(true, P.monVol == null ? .9 : P.monVol); P.monitor = true; } save(); upd(); };
-    recState = { type, startBar, countIn, len, replace }; updatePlayBtn();
+    recState = { type, startBar, countIn, len, replace, fresh: !!fresh && !replace }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
   }
   function recFrame() {
@@ -647,24 +652,24 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     if (cl.clipped) setTimeout(() => toast('⚠️ Ta prise sature un peu : éloigne le téléphone de la guitare ou chante moins près'), 3200);
     if (T.kind === 'audio') {
       let tid = null; if (st.replace) { const old = P.clips.find(c => c.id === st.replace); if (old) { tid = old.trackId; P.clips = P.clips.filter(c => c.id !== old.id); } }
-      const t = tid ? P.tracks.find(x => x.id === tid) : trackFor(st.type, st.startBar, lenBars);
+      const t = tid ? P.tracks.find(x => x.id === tid) : trackFor(st.type, st.startBar, lenBars, st.fresh);
       P.clips.push({ id: uid(), kind: 'audio', trackId: t.id, bar: st.startBar, lenBars, loops: 1, audioId, nudge: 0, pre: +pre.toFixed(4), lead: +lead.toFixed(4) });
       P.lastRec = { type: st.type, bar: st.startBar, clip: P.clips[P.clips.length - 1].id };
       commit(T.em + ' ' + T.name + ' enregistrée · ' + lenBars + ' mesure' + (lenBars > 1 ? 's' : '') + alignMsg + (st.type === 'voix' ? ' · écho malin activé' : '') + ' · appui long pour l\'éditer', true);
       if (P.tracks.find(t => t.id === P.clips[P.clips.length - 1].trackId).fx.autotune) tunedBuf(audioId);
     } else {
       busy(true, 'J\'écoute tes notes…');
-      later(() => { if (st.replace) P.clips = P.clips.filter(c => c.id !== st.replace); const r = voiceToInst(audioId, st.type, st.startBar, lenBars); busy(false); if (r) { P.lastRec = { type: st.type, bar: st.startBar, clip: P.clips[P.clips.length - 1].id }; save(); autoplay(); } });
+      later(() => { if (st.replace) P.clips = P.clips.filter(c => c.id !== st.replace); const r = voiceToInst(audioId, st.type, st.startBar, lenBars, 1, st.fresh); busy(false); if (r) { P.lastRec = { type: st.type, bar: st.startBar, clip: P.clips[P.clips.length - 1].id }; save(); autoplay(); } });
     }
   };
-  function voiceToInst(audioId, type, bar, lenBars, loops) {
+  function voiceToInst(audioId, type, bar, lenBars, loops, fresh) {
     const a = AUD[audioId]; const T = TYPES[type];
     const gk = guitarClips()[0]; if (gk) listen(gk); const r = DSP.voiceToNotes(a.data, a.sr, stepDur(), P.key && P.key.scale ? P.key : null);
     let notes = r.notes.filter(n => n.s < lenBars * 16);
     if (!notes.length) { renderTimeline(); toast('Je n\'ai pas entendu de notes. Chante plus fort, des notes bien tenues.'); return false; }
     const med = DSP.median(notes.map(n => n.m)), center = (T.range[0] + T.range[1]) / 2;
     const sh = 12 * Math.round((center - med) / 12); notes = notes.map(n => ({ ...n, m: n.m + sh }));
-    const t = trackFor(type, bar, lenBars * (loops || 1));
+    const t = trackFor(type, bar, lenBars * (loops || 1), fresh);
     P.clips.push({ id: uid(), kind: 'inst', trackId: t.id, bar, lenBars, loops: loops || 1, notes, src: audioId, key: r.key ? r.key.name : '' });
     commit(T.em + ' ' + T.name + ' : ' + notes.length + ' notes' + (r.key ? ' en ' + r.key.name : ''), true);
     return true;
