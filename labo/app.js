@@ -503,7 +503,7 @@ registerProcessor('labo-cap',Cap);`;
         sy.innerHTML = `<span style="font-size:13px;font-weight:700">⏱️ Synchro écouteurs : ${DEV.lat != null ? '<span style="color:var(--green)">' + Math.round(DEV.lat) + ' ms ✓</span>' : '<span style="color:var(--yellow)">pas encore réglée</span>'}</span><button class="btn yel" id="rsSyncBtn" style="padding:8px 12px;font-size:13px">${DEV.lat != null ? 'Refaire' : 'Régler'}</button>`;
         sy.querySelector('#rsSyncBtn').onclick = () => openSyncSheet(() => openRecSheet(type));
       };
-      bindClickChips(b);
+      bindClickChips(b, () => openRecSheet(type));
       hpTxt(); b.querySelectorAll('[data-m]').forEach(x => x.onclick = () => { P.recMode = x.dataset.m; hpTxt(); save(); });
       b.querySelector('#rsCount').onclick = e => { countIn = !countIn; e.target.classList.toggle('on', countIn); };
       b.querySelector('#rsMetro').onclick = e => { P.metroRec = !P.metroRec; e.target.classList.toggle('on', P.metroRec); save(); };
@@ -777,9 +777,54 @@ registerProcessor('labo-cap',Cap);`;
     renderPGrid(); save(); preview();
   }
 
-  const CLICKS = [['clic', '🔔 Clic'], ['fr', '🗣️ « Un, deux, trois, quatre »'], ['en', '🇬🇧 « One, two, three, four »']];
-  function clickChips() { return `<label class="lbl" style="margin-top:4px">Le décompte et le métronome</label><div class="chips" data-clicks>${CLICKS.map(([k, l]) => `<button class="chip ${(P.clickMode || 'clic') === k ? 'on' : ''}" data-cm="${k}">${l}</button>`).join('')}</div>`; }
-  function bindClickChips(b) { b.querySelectorAll('[data-cm]').forEach(x => x.onclick = () => { P.clickMode = x.dataset.cm; E.clickMode = P.clickMode; b.querySelectorAll('[data-cm]').forEach(y => y.classList.toggle('on', y === x)); save(); const t = AC.currentTime + .05, beat = Math.min(.5, 60 / P.bpm); for (let i = 0; i < 4; i++) E.click(t + i * beat, i === 0, 1, i); }); }
+  const CLICKS = [['clic', '🔔 Clic'], ['perso', '🎙️ Une vraie voix'], ['fr', '🤖 Robot FR'], ['en', '🤖 Robot EN']];
+  function clickChips() { return `<label class="lbl" style="margin-top:4px">Le décompte et le métronome</label><div class="chips" data-clicks>${CLICKS.map(([k, l]) => `<button class="chip ${(P.clickMode || 'clic') === k ? 'on' : ''}" data-cm="${k}">${l}</button>`).join('')}</div><button class="mini" data-vc style="margin-top:8px">🎙️ ${window.LABO_CUSTOM ? 'Changer la voix' : 'Enregistrer une voix'}</button>`; }
+  /* voix de décompte perso : on enregistre (ou importe) « un, deux, trois, quatre » et on découpe en 4 */
+  function splitCount(x, sr) {
+    const hop = Math.round(sr * .01), n = Math.floor(x.length / hop), e = new Float32Array(n); let mx = 0;
+    for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < hop; j++) { const v = x[i * hop + j]; s += v * v; } e[i] = Math.sqrt(s / hop); if (e[i] > mx) mx = e[i]; }
+    if (mx < .003) return null;
+    const thr = mx * .12; let segs = [], cur = null, gap = 0;
+    for (let i = 0; i < n; i++) { if (e[i] > thr) { if (!cur) cur = { a: i, b: i, pk: 0 }; cur.b = i; cur.pk = Math.max(cur.pk, e[i]); gap = 0; } else if (cur && ++gap > 9) { segs.push(cur); cur = null; gap = 0; } }
+    if (cur) segs.push(cur);
+    segs = segs.filter(s => s.b - s.a >= 6);
+    if (segs.length < 4) return null;
+    if (segs.length > 4) segs = segs.sort((p, q) => q.pk * (q.b - q.a) - p.pk * (p.b - p.a)).slice(0, 4).sort((p, q) => p.a - q.a);
+    let gmx = 0; segs.forEach(s => gmx = Math.max(gmx, s.pk));
+    return segs.map(s => { const a = Math.max(0, (s.a - 2) * hop), b = Math.min(x.length, (s.b + 6) * hop); const d = x.slice(a, b); let pk = 0; d.forEach(v => pk = Math.max(pk, Math.abs(v))); const g = .9 / (pk || 1); const f = Math.round(sr * .012); for (let i = 0; i < d.length; i++) { d[i] *= g; if (i < 30) d[i] *= i / 30; if (i > d.length - f) d[i] *= (d.length - i) / f; } return d; });
+  }
+  function setCustomCount(parts, sr) { window.LABO_CUSTOM = { sr, parts }; DB.put('kv', 'countVoice', { sr, parts }); }
+  function openVoiceCountSheet(back) {
+    openSheet(`<div class="sh-t"><span class="em">🎙️</span>Une vraie voix pour compter</div>
+      <p class="sh-p">Le plus simple : enregistre-toi en disant <b>« un… deux… trois… quatre »</b> (ou « one, two, three, four »), en laissant un petit blanc entre chaque mot. Le labo découpe tout seul.</p>
+      <button class="btn red full" id="vcRec" style="font-family:Bungee;font-size:17px">● Enregistrer ma voix</button>
+      <div class="blk"><label>Ou importer un fichier</label><p class="sh-p" style="font-size:13px;margin-bottom:8px">Un mémo vocal, ou une voix générée (ElevenLabs, etc.) qui dit les 4 chiffres.</p><label class="btn ghost full" style="position:relative;overflow:hidden">📁 Choisir un fichier audio<input type="file" accept="audio/*" id="vcFile" style="position:absolute;inset:0;opacity:0"></label></div>
+      <div id="vcOut"></div>
+      <button class="btn full" id="vcBack">${back ? '← Retour' : 'OK'}</button>`, b => {
+      const out = b.querySelector('#vcOut');
+      const done = (parts, sr) => {
+        if (!parts) { out.innerHTML = '<div class="blk"><b>😕 Je n\'ai pas trouvé 4 mots bien séparés.</b><br><span style="font-size:13px">Laisse un vrai petit blanc entre chaque chiffre et parle bien fort.</span></div>'; return; }
+        setCustomCount(parts, sr); P.clickMode = 'perso'; E.clickMode = 'perso'; E._cbp = null; save();
+        out.innerHTML = '<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ C\'est ta voix qui compte maintenant !</b></div>';
+        const t = AC.currentTime + .1, beat = Math.min(.55, 60 / P.bpm); for (let i = 0; i < 4; i++) E.click(t + i * beat, i === 0, 1, i);
+      };
+      b.querySelector('#vcBack').onclick = () => back ? back() : closeSheet();
+      const recBtn = b.querySelector('#vcRec'); let on = false;
+      recBtn.onclick = async () => {
+        AC.resume();
+        if (!on) { if (!(await needMic())) return; Mic.start(); on = true; recBtn.textContent = '■ Stop (dis 1… 2… 3… 4…)'; setTimeout(() => { if (on) recBtn.click(); }, 7000); return; }
+        on = false; recBtn.textContent = '● Recommencer'; const r = await Mic.stop(); done(splitCount(r.data, r.sr), r.sr);
+      };
+      b.querySelector('#vcFile').onchange = async e => {
+        const f = e.target.files[0]; if (!f) return; out.innerHTML = '<div class="blk">🎧 J\'écoute…</div>';
+        try { const ab = await new Promise((res, rej) => { f.arrayBuffer().then(buf => { const p = AC.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej); }); }); const x = new Float32Array(ab.length); for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < ab.length; i++) x[i] += d[i] / ab.numberOfChannels; } done(splitCount(x, ab.sampleRate), ab.sampleRate); }
+        catch (err) { out.innerHTML = '<div class="blk">Je n\'arrive pas à lire ce fichier.</div>'; }
+      };
+    });
+  }
+  function bindClickChips(b, back) { const vc = b.querySelector('[data-vc]'); if (vc) vc.onclick = () => openVoiceCountSheet(back);
+    b.querySelectorAll('[data-cm]').forEach(x => x.onclick = () => {
+    if (x.dataset.cm === 'perso' && !window.LABO_CUSTOM) { openVoiceCountSheet(back); return; } P.clickMode = x.dataset.cm; E.clickMode = P.clickMode; b.querySelectorAll('[data-cm]').forEach(y => y.classList.toggle('on', y === x)); save(); const t = AC.currentTime + .05, beat = Math.min(.5, 60 / P.bpm); for (let i = 0; i < 4; i++) E.click(t + i * beat, i === 0, 1, i); }); }
   /* ---------- tempo & menu ---------- */
   $('bpmBtn').onclick = () => {
     const locked = P.clips.some(c => c.kind === 'audio'); let taps2 = [];
@@ -793,7 +838,7 @@ registerProcessor('labo-cap',Cap);`;
       b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { P.bpm = Math.max(50, Math.min(220, Math.round(P.bpm) + +x.dataset.d)); upd(); });
       b.querySelector('#tpTap').onclick = () => { const n = performance.now(); taps2 = taps2.filter(t => n - t < 2500); taps2.push(n); E.click(AC.currentTime + .005, taps2.length === 1); if (taps2.length >= 3) { const iv = []; for (let i = 1; i < taps2.length; i++) iv.push(taps2[i] - taps2[i - 1]); P.bpm = Math.round(60000 / DSP.median(iv)); upd(); } };
       b.querySelectorAll('[data-t]').forEach(x => x.onclick = () => { const k = x.dataset.t; P[k] = !P[k]; x.classList.toggle('on', P[k]); updatePlayBtn(); save(); });
-      bindClickChips(b);
+      bindClickChips(b, () => $('bpmBtn').click());
     });
   };
   $('menuBtn').onclick = () => {
@@ -846,6 +891,7 @@ registerProcessor('labo-cap',Cap);`;
     AC.onstatechange = () => { if (AC.state === 'interrupted' || AC.state === 'suspended') { if (player && player.playing && !recState) stop(); } };
     $('openBtn').textContent = '…';
     await DB.open();
+    const cv = await DB.get('kv', 'countVoice'); if (cv && cv.parts) window.LABO_CUSTOM = cv;
     const saved = await DB.get('kv', 'project');
     if (saved && saved.v === 1) {
       P = saved;

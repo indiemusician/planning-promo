@@ -151,6 +151,7 @@
       this.nz(t, 1.5).connect(hp); hp.connect(g); g.connect(this.drumIn); this.env(g, t, .32 * v, 1.5, .003);
     }
     countBufs(lang) {
+      if (lang === 'perso') { const c = window.LABO_CUSTOM; if (!c) return null; if (this._cbp !== c) { this._cbp = c; this._cbpb = c.parts.map(d => { const b = this.ac.createBuffer(1, d.length, c.sr); b.getChannelData(0).set(d); return b; }); } return this._cbpb; }
       if (!window.LABO_COUNTS || !LABO_COUNTS[lang]) return null; this._cb = this._cb || {};
       if (!this._cb[lang]) { const L = LABO_COUNTS[lang]; this._cb[lang] = L.pcm.map(b64 => { const bin = atob(b64), n = bin.length >> 1, buf = this.ac.createBuffer(1, n, L.sr), d = buf.getChannelData(0); for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; d[i] = v / 32768; } return buf; }); }
       return this._cb[lang];
