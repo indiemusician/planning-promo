@@ -36,16 +36,18 @@
     constructor(ac) {
       this.ac = ac; this.kit = 'rock';
       this.out = ac.createGain();
-      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 3; comp.attack.value = .004; comp.release.value = .2;
-      const lim = ac.createDynamicsCompressor(); lim.threshold.value = -2; lim.ratio.value = 20; lim.attack.value = .001; lim.release.value = .08;
+      /* compresseur doux (lent, il ne module pas les graves) + écrêtage tout en douceur à la fin : plus de grésillement */
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 2.5; comp.attack.value = .012; comp.release.value = .3;
+      const pre = ac.createGain(); pre.gain.value = .8;
+      const soft = ac.createWaveShaper(); const sc = new Float32Array(4096); for (let i = 0; i < 4096; i++) { const v = i / 4095 * 2 - 1; sc[i] = Math.abs(v) < .7 ? v : Math.sign(v) * (.7 + .3 * Math.tanh((Math.abs(v) - .7) / .3)); } soft.curve = sc;
       this.master = ac.createGain(); this.master.gain.value = .9;
-      this.out.connect(comp); comp.connect(lim); lim.connect(this.master); this.master.connect(ac.destination);
+      this.out.connect(pre); pre.connect(comp); comp.connect(soft); soft.connect(this.master); this.master.connect(ac.destination);
       const len = ac.sampleRate * 2; this.noise = ac.createBuffer(1, len, ac.sampleRate);
       const d = this.noise.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      this.revIn = ac.createGain(); const conv = ac.createConvolver(); conv.buffer = makeIR(ac, 2.4, 3); const revOut = ac.createGain(); revOut.gain.value = .8;
+      this.revIn = ac.createGain(); const conv = ac.createConvolver(); conv.buffer = makeIR(ac, 1.6, 3); const revOut = ac.createGain(); revOut.gain.value = .8;
       this.revIn.connect(conv); conv.connect(revOut); revOut.connect(this.out);
-      this.roomIn = ac.createGain(); const room = ac.createConvolver(); room.buffer = makeIR(ac, .9, 4); this.roomIn.connect(room); room.connect(this.out);
-      this.drumDrive = ac.createWaveShaper(); this.drumDrive.oversample = '2x';
+      this.roomIn = ac.createGain(); const room = ac.createConvolver(); room.buffer = makeIR(ac, .6, 4); this.roomIn.connect(room); room.connect(this.out);
+      this.drumDrive = ac.createWaveShaper(); this.drumDrive.oversample = 'none';
       this.drumIn = ac.createGain(); this.drumIn.connect(this.drumDrive);
       this.drumRoom = ac.createGain(); this.drumIn.connect(this.drumRoom); this.drumRoom.connect(this.roomIn);
       this.chains = {}; this.openG = null; this.setKit('rock');
@@ -132,11 +134,8 @@
     hat(t, open, v) {
       const ac = this.ac, el = this.kit === 'electro';
       if (this.openG) { try { this.openG.gain.cancelScheduledValues(t); this.openG.gain.setTargetAtTime(.0001, t, .008); } catch (e) { } this.openG = null; }
-      const g = ac.createGain(), bp = ac.createBiquadFilter(), hp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 10000; hp.type = 'highpass'; hp.frequency.value = 7000;
-      const dur = open ? .4 : .055, base = el ? 42 : 38;
-      [2, 3, 4.16, 5.43, 6.79, 8.21].forEach(r => { const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = base * r; o.connect(bp); o.start(t); o.stop(t + dur + .05); });
-      if (!el) this.nz(t, dur).connect(hp);
-      bp.connect(hp); hp.connect(g); g.connect(this.drumIn); this.env(g, t, (open ? .3 : .36) * v, dur);
+      const g = ac.createGain(), hp = ac.createBiquadFilter(), pk = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = el ? 8000 : 7000; pk.type = 'peaking'; pk.frequency.value = el ? 10500 : 9000; pk.Q.value = 1.2; pk.gain.value = 6;
+      const dur = open ? .38 : .05; this.nz(t, dur).connect(hp); hp.connect(pk); pk.connect(g); g.connect(this.drumIn); this.env(g, t, (open ? .34 : .4) * v, dur);
       if (open) this.openG = g;
     }
     tom(t, v, hi) {
@@ -146,15 +145,8 @@
       const n = this.nz(t, .05), ng = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2500; this.env(ng, t, .2 * v, .05); n.connect(lp); lp.connect(ng); ng.connect(this.drumIn);
     }
     crash(t, v) {
-      const ac = this.ac, g = ac.createGain(), hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4500;
-      [2, 3, 4.16, 5.43, 6.79, 8.21].forEach(r => { const o = ac.createOscillator(); o.type = 'square'; o.frequency.value = 61 * r; o.connect(hp); o.start(t); o.stop(t + 1.6); });
-      this.nz(t, 1.5).connect(hp); hp.connect(g); g.connect(this.drumIn); this.env(g, t, .32 * v, 1.5, .003);
-    }
-    countBufs(lang) {
-      if (lang === 'perso') { const c = window.LABO_CUSTOM; if (!c) return null; if (this._cbp !== c) { this._cbp = c; this._cbpb = c.parts.map(d => { const b = this.ac.createBuffer(1, d.length, c.sr); b.getChannelData(0).set(d); return b; }); } return this._cbpb; }
-      if (!window.LABO_COUNTS || !LABO_COUNTS[lang]) return null; this._cb = this._cb || {};
-      if (!this._cb[lang]) { const L = LABO_COUNTS[lang]; this._cb[lang] = L.pcm.map(b64 => { const bin = atob(b64), n = bin.length >> 1, buf = this.ac.createBuffer(1, n, L.sr), d = buf.getChannelData(0); for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; d[i] = v / 32768; } return buf; }); }
-      return this._cb[lang];
+      const ac = this.ac, g = ac.createGain(), hp = ac.createBiquadFilter(), pk = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200; pk.type = 'peaking'; pk.frequency.value = 6500; pk.Q.value = .8; pk.gain.value = 5;
+      this.nz(t, 1.5).connect(hp); hp.connect(pk); pk.connect(g); g.connect(this.drumIn); this.env(g, t, .3 * v, 1.5, .003);
     }
     click(t, accent, vol, n) {
       const bufs = this.clickMode && this.clickMode !== 'clic' ? this.countBufs(this.clickMode) : null;
@@ -178,8 +170,8 @@
       let rel = .1, end;
       if (inst === 'basse') {
         const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 5; lp.frequency.setValueAtTime(1100, t); lp.frequency.exponentialRampToValueAtTime(260, t + .25); lp.connect(amp);
-        osc('sawtooth', f).connect(lp); const sub = osc('sine', f); const sg = ac.createGain(); sg.gain.value = .9; sub.connect(sg); sg.connect(amp);
-        amp.gain.setValueAtTime(.0001, t); amp.gain.exponentialRampToValueAtTime(.55 * vel, t + .008); amp.gain.setTargetAtTime(.38 * vel, t + .05, .2); rel = .08;
+        osc('sawtooth', f).connect(lp); const sub = osc('sine', f); const sg = ac.createGain(); sg.gain.value = .6; sub.connect(sg); sg.connect(amp);
+        amp.gain.setValueAtTime(.0001, t); amp.gain.exponentialRampToValueAtTime(.45 * vel, t + .008); amp.gain.setTargetAtTime(.32 * vel, t + .05, .2); rel = .08;
       } else if (inst === 'violon') {
         const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400; const pk = ac.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1100; pk.gain.value = 4;
         lp.connect(pk); pk.connect(amp);

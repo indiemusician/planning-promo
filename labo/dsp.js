@@ -396,7 +396,7 @@
       if (q - lastK < 55) { if (att.length && ratio[k] > att[att.length - 1].w) { att[att.length - 1] = { t: q * h / sr, w: ratio[k] }; lastK = q; } continue; }
       att.push({ t: q * h / sr, w: ratio[k] }); lastK = q;
     }
-    const A = []; att.forEach(o => { const l = A[A.length - 1]; if (l && o.t - l.t < .055) { if (o.w > l.w) A[A.length - 1] = o; } else A.push(o); });
+    const A = []; att.forEach(o => { const l = A[A.length - 1]; if (l && o.t - l.t < .09) { if (o.w > l.w) A[A.length - 1] = o; } else A.push(o); });
     if (A.length < 2) return null;
     /* 2. grille : position d'une double-croche k (avec le swing de la batterie) */
     const gridT = k => origin + k * sd + (k % 2 !== 0 ? swing * sd * .66 : 0);
@@ -424,17 +424,22 @@
         add(sg.dst + j, x[si], w);
       }
       if (need > have) {
-        const G = Math.max(Math.round(4 * ms), Math.min(Math.round(35 * ms), Math.floor(have * .4))), C = Math.max(2, Math.min(Math.round(8 * ms), G >> 1));
-        let pos = have - C;
-        while (pos < need) {
-          for (let j = 0; j < G && pos + j < need; j++) {
-            const si = sg.src + have - G + j; if (si < 0 || si >= x.length) continue;
-            let w = 1; if (j < C) w = Math.sin(j / C * Math.PI / 2); if (j >= G - C) w *= Math.cos((j - (G - C)) / C * Math.PI / 2);
-            if (fadeOut && pos + j >= need - fadeOut) w *= Math.cos((pos + j - (need - fadeOut)) / fadeOut * Math.PI / 2);
-            add(sg.dst + pos + j, x[si], w);
-          }
-          pos += G - C;
+        /* rallonge calée sur la période du son (pas de bourdonnement) : on cherche la période qui se répète le mieux à la fin de la tranche */
+        const e = sg.src + have, W = Math.round(10 * ms); let L = Math.round(10 * ms), bc = -2;
+        for (let lag = Math.round(2.5 * ms); lag <= Math.round(22 * ms); lag++) {
+          if (e - lag - W < sg.src) break; let num = 0, d1 = 0, d2 = 0;
+          for (let j = 0; j < W; j += 2) { const p1 = x[e - W + j], p2 = x[e - lag - W + j]; num += p1 * p2; d1 += p1 * p1; d2 += p2 * p2; }
+          const cor = num / Math.sqrt(d1 * d2 + 1e-12); if (cor > bc) { bc = cor; L = lag; }
         }
+        const C = Math.max(2, Math.min(Math.round(4 * ms), L >> 1));
+        for (let j = have - C; j < need; j++) {
+          const k = j - have; const si = e - L + (((k % L) + L) % L); if (si < 0 || si >= x.length) continue;
+          let w = 1; if (j < have) w = Math.sin((j - (have - C)) / C * Math.PI / 2);
+          if (fadeOut && j >= need - fadeOut) w *= Math.cos((j - (need - fadeOut)) / fadeOut * Math.PI / 2);
+          add(sg.dst + j, x[si], w);
+        }
+        /* la fin d'origine s'efface sous la rallonge */
+        for (let j = have - C; j < have; j++) { const o = sg.dst + j; if (o >= 0 && o < out.length) { const w = Math.cos((j - (have - C)) / C * Math.PI / 2); const si = sg.src + j; out[o] -= x[si] * (1 - w); wsum[o] -= (1 - w); } }
       }
     }
     for (let i = 0; i < out.length; i++) if (wsum[i] > 1.02) out[i] /= wsum[i];
