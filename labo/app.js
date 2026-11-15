@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 23;
+  const VERSION = 24;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -297,7 +297,7 @@ registerProcessor('labo-cap',Cap);`;
     else openSheet(`<div class="sh-t"><span class="em">📲</span>Installer le Labo</div><p class="sh-p">${msg}</p><p class="sh-p">Ensuite, ouvre-le depuis son icône : il s'ouvre en plein écran, comme une vraie appli.</p><button class="btn full" data-close>OK</button>`);
   }
   if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
-  function play(from) { if (AC.state !== 'running') AC.resume(); applyTracks(); player.start(from == null ? P.cursor : from, {}); updatePlayBtn(); keepAwake(true); }
+  function play(from) { if (acMode === 'fast' && DEV.audioMode !== 'fast' && !recState) setLatency('stable'); if (AC.state !== 'running') AC.resume(); applyTracks(); player.start(from == null ? P.cursor : from, {}); updatePlayBtn(); keepAwake(true); }
   function stop() { player.stop(); updatePlayBtn(); if (!recState) keepAwake(false); }
   function updatePlayBtn() { $('playBtn').classList.toggle('on', player.playing && !player.opt.preview); $('loopBtn').classList.toggle('on', P.loop); }
   $('playBtn').onclick = () => { AC.resume(); (player.playing && !player.opt.preview) ? stop() : play(); };
@@ -551,10 +551,22 @@ registerProcessor('labo-cap',Cap);`;
       hpTxt(); b.querySelectorAll('[data-m]').forEach(x => x.onclick = () => { P.recMode = x.dataset.m; hpTxt(); save(); });
       b.querySelector('#rsCount').onclick = e => { countIn = !countIn; P.recPrefs.countIn = countIn; save(); e.target.classList.toggle('on', countIn); };
       b.querySelector('#rsMetro').onclick = e => { P.metroRec = !P.metroRec; e.target.classList.toggle('on', P.metroRec); save(); };
-      b.querySelector('#rsGo').onclick = async () => { AC.resume(); if (!(await needMic())) return; closeSheet(); startRec(type, start, countIn, len); };
+      b.querySelector('#rsGo').onclick = async () => { if (wantsFast()) setLatency('fast'); AC.resume(); if (!(await needMic())) return; closeSheet(); startRec(type, start, countIn, len); };
     });
   }
+  /* bascule du moteur audio : ultra-réactif pendant les prises avec retour, stable pour la lecture */
+  let acMode = null;
+  function setLatency(mode) {
+    if (!AC || acMode === mode) return; const A = window.AudioContext || window.webkitAudioContext;
+    if (player) player.stop(); Mic.release();
+    const old = AC; let n; try { n = new A({ latencyHint: mode === 'fast' ? 0.005 : 'playback' }); } catch (e) { try { n = new A({ latencyHint: mode === 'fast' ? 'interactive' : 'playback' }); } catch (e2) { return; } }
+    AC = n; acMode = mode; AC.resume(); AC.onstatechange = old.onstatechange; rebuildEngine();
+    for (const k in AUD) { AUD[k].buf = AUD[k].buf || null; }
+    setTimeout(() => { try { old.close(); } catch (e) { } }, 300);
+  }
+  const wantsFast = () => (P.recMode === 'hp' && P.monitor !== false) || DEV.audioMode === 'fast';
   async function quickRec(type, startBar, replace) {
+    if (wantsFast()) setLatency('fast');
     AC.resume(); if (!(await needMic())) return; closeSheet();
     const pr = P.recPrefs || { len: 0, countIn: true }; startRec(type, startBar == null ? P.cursor : startBar, pr.countIn !== false, pr.len || 0, replace);
   }
@@ -565,7 +577,8 @@ registerProcessor('labo-cap',Cap);`;
     if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
     player.start(startBar, { countIn, recording: true, quiet: mode === 'click', skip: replace || null });
     const monOn = mode === 'hp' && P.monitor !== false; if (monOn) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
-    const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
+    const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const lat = Math.round(((AC.baseLatency || 0) + (AC.outputLatency || 0)) * 1000);
+    const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI' + (lat ? ' · retard téléphone ~' + lat + ' ms' : '') + ' (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
     rm.onclick = () => { if (Mic.mon) { Mic.monitor(false); P.monitor = false; } else { Mic.monitor(true, P.monVol == null ? .9 : P.monVol); P.monitor = true; } save(); upd(); };
     recState = { type, startBar, countIn, len, replace }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
@@ -1144,6 +1157,7 @@ registerProcessor('labo-cap',Cap);`;
     const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     try { AC = iOS ? new A({ latencyHint: 'interactive', sampleRate: 48000 }) : new A({ latencyHint: DEV.audioMode === 'fast' ? 'interactive' : 'playback' }); } catch (e) { AC = new A(); } /* grande réserve audio : plus de micro-coupures sur Android */
     AC.resume();
+    acMode = DEV.audioMode === 'fast' ? 'fast' : 'stable';
     AC.onstatechange = () => { if (AC.state === 'interrupted' || AC.state === 'suspended') { if (player && player.playing && !recState) stop(); } };
     $('openBtn').textContent = '…';
     await DB.open();
