@@ -233,3 +233,5 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .spin{font-size:44px;animation:wob .7s ease-in-out infinite}
 @keyframes wob{25%{transform:rotate(-14deg)}75%{transform:rotate(14deg)}}
 .burst{position:fixed;pointer-events:none;font-family:'Bungee';font-size:22px;text-shadow:3px 3px 0 var(--ink);z-index:70}
+
+body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}

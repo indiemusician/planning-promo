@@ -97,8 +97,10 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
+  const VERSION = 12;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
-  const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } };
+  if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
+  const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } DB.put('kv', 'device', DEV); };
 
   /* ---------- micro ---------- */
   /* Capture micro sur le fil audio (AudioWorklet) : pas de trous, horodatage exact à l'échantillon près.
@@ -171,11 +173,11 @@ registerProcessor('labo-cap',Cap);`;
   let sheetClose = null;
   function openSheet(html, mount, onClose) {
     if (sheetClose) { const f = sheetClose; sheetClose = null; f(); }
-    $('sheetBody').innerHTML = html; $('sheetWrap').hidden = false; $('sheetBody').scrollTop = 0;
+    $('sheetBody').innerHTML = html; $('sheetWrap').hidden = false; document.body.classList.add('sheet-open'); $('sheetBody').scrollTop = 0;
     $('sheetBody').querySelectorAll('[data-close]').forEach(b => b.onclick = closeSheet);
     sheetClose = onClose || null; if (mount) mount($('sheetBody'));
   }
-  function closeSheet() { $('sheetWrap').hidden = true; if (sheetClose) { const f = sheetClose; sheetClose = null; f(); } }
+  function closeSheet() { $('sheetWrap').hidden = true; document.body.classList.remove('sheet-open'); if (sheetClose) { const f = sheetClose; sheetClose = null; f(); } }
   $('scrim').onclick = closeSheet;
   (function () {
     const sh = $('sheet'), body = $('sheetBody'); let y0 = null, dy = 0, fromGrab = false;
@@ -227,16 +229,17 @@ registerProcessor('labo-cap',Cap);`;
     const n = c.notes || []; if (!n.length) return '';
     const W = c.lenBars * 16, loops = c.loops || 1; let lo = 127, hi = 0; n.forEach(x => { lo = Math.min(lo, x.m); hi = Math.max(hi, x.m); }); const rng = Math.max(6, hi - lo + 2);
     let s = `<svg viewBox="0 0 ${W * loops} 40" preserveAspectRatio="none">`;
-    for (let r = 0; r < loops; r++) n.forEach(x => { if (x.s >= W) return; const y = 34 - (x.m - lo + 1) / rng * 26; s += `<rect x="${r * W + x.s + .15}" y="${y.toFixed(1)}" width="${Math.max(.6, Math.min(x.l, W - x.s) - .3)}" height="3.4" rx="1" fill="#070a1f" opacity=".75"/>`; });
+    const ins = (c.inBars || 0) * 16;
+    for (let r = 0; r < loops; r++) n.forEach(x0 => { const x = { ...x0, s: x0.s - ins }; if (x.s < 0 || x.s >= W) return; const y = 34 - (x.m - lo + 1) / rng * 26; s += `<rect x="${r * W + x.s + .15}" y="${y.toFixed(1)}" width="${Math.max(.6, Math.min(x.l, W - x.s) - .3)}" height="3.4" rx="1" fill="#070a1f" opacity=".75"/>`; });
     return s + '</svg>';
   }
   function drawWave(cv, c) {
     if (!c) return; const a = AUD[c.audioId]; if (!a) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1); const repW = c.lenBars * BW, loops = c.loops || 1;
     cv.width = repW * loops * dpr; cv.height = 50 * dpr; const g = cv.getContext('2d'); g.fillStyle = 'rgba(7,10,31,.65)';
-    const spb = barDur() * a.sr, total = Math.min(a.data.length, Math.floor(c.lenBars * spb)); const cols = Math.floor(repW * dpr / 2);
+    const spb = barDur() * a.sr, base = Math.floor((c.inBars || 0) * spb), total = Math.min(a.data.length, base + Math.floor(c.lenBars * spb)); const cols = Math.floor(repW * dpr / 2);
     const peaks = []; let mx = 1e-4;
-    for (let i = 0; i < cols; i++) { const s0 = Math.floor(i / cols * c.lenBars * spb), s1 = Math.min(total, Math.floor((i + 1) / cols * c.lenBars * spb)); let m = 0; for (let j = s0; j < s1; j += 8) { const v = Math.abs(a.data[j]); if (v > m) m = v; } peaks.push(m); if (m > mx) mx = m; }
+    for (let i = 0; i < cols; i++) { const s0 = base + Math.floor(i / cols * c.lenBars * spb), s1 = Math.min(total, base + Math.floor((i + 1) / cols * c.lenBars * spb)); let m = 0; for (let j = s0; j < s1; j += 8) { const v = Math.abs(a.data[j]); if (v > m) m = v; } peaks.push(m); if (m > mx) mx = m; }
     for (let r = 0; r < loops; r++) peaks.forEach((m, i) => { const hh = Math.max(1, m / mx * 18 * dpr); g.fillRect(r * repW * dpr + i * 2, cv.height / 2 + 4 * dpr - hh, 1.4 * dpr, hh * 2); });
   }
   $('tlInner').addEventListener('click', e => {
@@ -356,8 +359,8 @@ registerProcessor('labo-cap',Cap);`;
   function guitarClips() { return P.clips.filter(c => { const t = P.tracks.find(x => x.id === c.trackId); return t && t.type === 'guitare' && c.kind === 'audio'; }); }
   function listen(c) {
     const a = AUD[c.audioId]; if (!a) return null;
-    const k = [P.bpm, c.nudge || 0, c.lenBars].join('_'); if (a.listen && a.listenKey === k) return a.listen;
-    const sh = Math.round(-(c.nudge || 0) / 1000 * a.sr); let x;
+    const k = [P.bpm, c.nudge || 0, c.lenBars, c.inBars || 0].join('_'); if (a.listen && a.listenKey === k) return a.listen;
+    const sh = Math.round(((c.inBars || 0) * barDur() - (c.nudge || 0) / 1000) * a.sr); let x;
     if (sh >= 0) x = a.data.subarray(sh); else { x = new Float32Array(a.data.length - sh); x.set(a.data, -sh); }
     const sd = stepDur(), n = c.lenBars * 16;
     const h = DSP.analyzeHarmony(x, a.sr, sd * 4, c.lenBars * 4);
@@ -640,6 +643,7 @@ registerProcessor('labo-cap',Cap);`;
     const isVoice = c.kind === 'audio' && t.type === 'voix', isGtr = c.kind === 'audio' && t.type === 'guitare';
     let h = `<div class="sh-t"><span class="em">${t.em}</span>${c.label || t.name}</div>`;
     if (fresh) h += `<p class="sh-p">Bien joué ! Tu peux la boucler pour l'allonger, ou la recaler si elle traîne un peu.</p>`;
+    h += `<button class="btn yel full" data-a="edit" style="font-family:Bungee;font-size:16px;margin-bottom:4px">✂️ Éditer : raccourcir, couper, effacer</button>`;
     h += `<div class="blk"><label>Boucler</label><div class="row"><div class="stepper"><button data-a="lm">−</button><b id="csLoops">×${c.loops || 1}</b><button data-a="lp">+</button></div><span class="sh-p" style="margin:0;font-size:12.5px">${c.lenBars} mesure${c.lenBars > 1 ? 's' : ''} par tour</span></div></div>`;
     h += `<div class="blk"><label>Position</label><div class="stepper"><button data-a="bm">−</button><b id="csBar">mes. ${c.bar + 1}</b><button data-a="bp">+</button></div></div>`;
     if (c.kind === 'audio') h += `<div class="blk"><label>Calage <span id="csNudge">${c.nudge || 0} ms</span></label><input type="range" min="-250" max="250" step="5" value="${c.nudge || 0}" id="csN"><p class="sh-p" style="font-size:12px;margin:8px 0 0">Vers la gauche si la prise traîne, vers la droite si elle se précipite.</p></div>`;
@@ -660,6 +664,7 @@ registerProcessor('labo-cap',Cap);`;
         if (a === 'om' || a === 'op') { snap(); c.oct = Math.max(-2, Math.min(2, (c.oct || 0) + (a === 'op' ? 1 : -1))); b.querySelector('#csOct').textContent = (c.oct > 0 ? '+' : '') + c.oct; re(); }
         if (a === 'dup') { snap(); const n = clone(c); n.id = uid(); n.bar = c.bar + c.lenBars * (c.loops || 1); const tt = trackFor(t.type, n.bar, n.lenBars * (n.loops || 1)); n.trackId = tt.id; P.clips.push(n); const need = n.bar + n.lenBars * (n.loops || 1); while (P.bars < need) { P.bars++; P.drumBars.push('A'); } closeSheet(); commit('⧉ Bloc dupliqué', true); }
         if (a === 'pl') { closeSheet(); play(c.bar); }
+        if (a === 'edit') { openEditor(c.id); }
         if (a === 'raw') { stop(); const bf = audioBuf(c.audioId); if (!bf) return; if (window._raw) { try { window._raw.stop(); } catch (e) { } } const src = AC.createBufferSource(); src.buffer = bf; src.connect(AC.destination); src.start(); window._raw = src; x.textContent = '■ Arrêter'; src.onended = () => { x.textContent = '🎧 Écouter la prise seule, sans rien'; }; x.onclick = () => { try { src.stop(); } catch (e) { } }; }
         if (a === 'del') { snap(); P.clips = P.clips.filter(x => x.id !== c.id); closeSheet(); commit('Bloc supprimé', true); }
         if (a === 'ab') { closeSheet(); autoBass(); }
@@ -677,6 +682,78 @@ registerProcessor('labo-cap',Cap);`;
           if (ok) autoplay();
         });
       });
+    });
+  }
+
+  /* ---------- éditeur tactile ---------- */
+  function openEditor(id) {
+    const c = P.clips.find(x => x.id === id); if (!c) return; const t = P.tracks.find(x => x.id === c.trackId);
+    stop(); snap(); let undoMark = hist.length;
+    const bd = barDur(), a = c.kind === 'audio' ? AUD[c.audioId] : null;
+    const srcBars = c.kind === 'audio' ? Math.max(1, Math.ceil(a.data.length / a.sr / bd - .05)) : (c.srcBars = c.srcBars || Math.max((c.inBars || 0) + c.lenBars, Math.ceil(Math.max(0, ...(c.notes || []).map(n => n.s + n.l)) / 16)));
+    let tool = 'trim', cut = null, prevSnap = null;
+    const buzz = () => { if (navigator.vibrate) navigator.vibrate(8); };
+    openSheet(`<div class="sh-t"><span class="em">✂️</span>Éditer · ${c.label || t.name}</div>
+      <div class="tabs" id="edTabs"><button data-t="trim" class="on">↔️ Raccourcir</button><button data-t="cut">✂️ Couper</button><button data-t="erase">🧽 Effacer</button></div>
+      <p class="sh-p" id="edHelp" style="font-size:13px;margin:10px 0 8px"></p>
+      <div style="position:relative;border-radius:16px;overflow:hidden;border:3px solid var(--cream);background:var(--navy3)"><canvas id="edCv" style="display:block;width:100%;height:170px;touch-action:none"></canvas></div>
+      <div class="row" style="margin-top:12px"><b id="edInfo" style="font-size:14px"></b><button class="btn" id="edCut" hidden style="padding:10px 14px">✂️ Couper ici</button></div>
+      <div class="row" style="margin-top:12px"><button class="btn ghost" id="edPlay" style="flex:1">▶ Écouter</button><button class="btn yel" id="edDone" style="flex:1">✓ Terminé</button></div>
+      <button class="danger" id="edReset">Tout remettre comme avant</button>`, b => {
+      const cv = b.querySelector('#edCv'), g = cv.getContext('2d'); const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const W = () => cv.clientWidth, H = 170, PAD = 22;
+      const xOf = bar => PAD + bar / srcBars * (W() - 2 * PAD), barOf = x => (x - PAD) / (W() - 2 * PAD) * srcBars;
+      const helps = { trim: 'Attrape les poignées jaunes et glisse-les pour garder seulement le morceau qui te plaît. Ça se cale tout seul sur les mesures.', cut: 'Touche l\'endroit où couper, puis « Couper ici ». Tu obtiens deux blocs que tu peux déplacer ou supprimer.', erase: 'Passe ton doigt sur un passage raté pour le rendre muet. Touche une zone hachurée pour la remettre.' };
+      let peaks = null;
+      if (a) { const n = 400; peaks = new Float32Array(n); let mx = 1e-4; const tot = srcBars * bd * a.sr; for (let i = 0; i < n; i++) { const s0 = Math.floor(i / n * tot), s1 = Math.min(a.data.length, Math.floor((i + 1) / n * tot)); let m = 0; for (let j = s0; j < s1; j += 6) { const v = Math.abs(a.data[j]); if (v > m) m = v; } peaks[i] = m; if (m > mx) mx = m; } for (let i = 0; i < n; i++) peaks[i] /= mx; }
+      function draw() {
+        const w = W(); cv.width = w * dpr; cv.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, H);
+        const inB = c.inBars || 0, endB = inB + c.lenBars;
+        for (let i = 0; i <= srcBars; i++) { const x = xOf(i); g.fillStyle = 'rgba(246,236,214,.12)'; g.fillRect(x, 18, 1, H - 18); if (i < srcBars && (srcBars <= 16 || i % 2 === 0)) { g.fillStyle = 'rgba(246,236,214,.5)'; g.font = '700 10px Space Grotesk, sans-serif'; g.fillText(String(i + 1), x + 4, 13); } }
+        g.fillStyle = t.color;
+        if (peaks) { const n = peaks.length; for (let i = 0; i < n; i++) { const x = PAD + i / n * (w - 2 * PAD), hh = Math.max(1, peaks[i] * (H - 50) / 2); g.fillRect(x, 18 + (H - 18) / 2 - hh, Math.max(1, (w - 2 * PAD) / n - .5), hh * 2); } }
+        else { const ns = c.notes || []; let lo = 127, hi = 0; ns.forEach(n => { lo = Math.min(lo, n.m); hi = Math.max(hi, n.m); }); const rng = Math.max(8, hi - lo + 2); ns.forEach(n => { const x0 = xOf(n.s / 16), x1 = xOf((n.s + n.l) / 16); const y = H - 14 - (n.m - lo + 1) / rng * (H - 50); g.beginPath(); g.roundRect ? g.roundRect(x0, y, Math.max(3, x1 - x0 - 1), 7, 3) : g.rect(x0, y, Math.max(3, x1 - x0 - 1), 7); g.fill(); }); }
+        g.fillStyle = 'rgba(7,10,31,.72)'; g.fillRect(0, 18, xOf(inB), H); g.fillRect(xOf(endB), 18, w - xOf(endB), H);
+        (c.mutes || []).forEach(([m0, m1]) => { const x0 = xOf(inB + m0 / 4), x1 = xOf(inB + m1 / 4); g.save(); g.beginPath(); g.rect(x0, 18, x1 - x0, H); g.clip(); g.fillStyle = 'rgba(7,10,31,.55)'; g.fillRect(x0, 18, x1 - x0, H); g.strokeStyle = 'rgba(239,59,74,.9)'; g.lineWidth = 3; for (let k = -H; k < x1 - x0 + H; k += 12) { g.beginPath(); g.moveTo(x0 + k, 18); g.lineTo(x0 + k + H, H + 18); g.stroke(); } g.restore(); });
+        g.strokeStyle = '#ffd23f'; g.lineWidth = 3; g.strokeRect(xOf(inB) + 1.5, 19.5, xOf(endB) - xOf(inB) - 3, H - 21);
+        [xOf(inB), xOf(endB)].forEach((x, k) => { g.fillStyle = '#ffd23f'; g.beginPath(); g.roundRect ? g.roundRect(x - 9, H / 2 - 24, 18, 58, 8) : g.rect(x - 9, H / 2 - 24, 18, 58); g.fill(); g.fillStyle = '#070a1f'; g.fillRect(x - 3, H / 2 - 6, 2, 22); g.fillRect(x + 1, H / 2 - 6, 2, 22); });
+        if (tool === 'cut' && cut != null) { const x = xOf(cut); g.fillStyle = '#fff'; g.fillRect(x - 1.5, 18, 3, H); g.font = '20px sans-serif'; g.fillText('✂️', x - 11, H - 6); }
+        b.querySelector('#edInfo').textContent = tool === 'cut' ? (cut != null ? 'Coupe à la mesure ' + (c.bar + cut - inB + 1) : 'Touche où couper') : `Garde ${c.lenBars} mesure${c.lenBars > 1 ? 's' : ''}` + ((c.mutes || []).length ? ` · ${(c.mutes || []).length} passage(s) effacé(s)` : '');
+        b.querySelector('#edCut').hidden = !(tool === 'cut' && cut != null);
+        b.querySelector('#edHelp').textContent = helps[tool];
+      }
+      let drag = null;
+      cv.addEventListener('pointerdown', e => {
+        cv.setPointerCapture(e.pointerId); const r = cv.getBoundingClientRect(), x = e.clientX - r.left; const inB = c.inBars || 0, endB = inB + c.lenBars;
+        if (tool === 'trim') { const dl = Math.abs(x - xOf(inB)), dr = Math.abs(x - xOf(endB)); drag = dl < dr ? 'L' : 'R'; if (Math.min(dl, dr) > 60) drag = null; buzz(); }
+        else if (tool === 'cut') { const bb = Math.round(barOf(x)); if (bb > inB && bb < endB) { cut = bb; buzz(); } draw(); }
+        else if (tool === 'erase') {
+          const beat = Math.max(0, Math.min(c.lenBars * 4, Math.round((barOf(x) - inB) * 8) / 2));
+          const hit = (c.mutes || []).findIndex(([m0, m1]) => beat >= m0 && beat <= m1);
+          if (hit >= 0 && e.pointerType !== 'mouse-drag') { c.mutes.splice(hit, 1); buzz(); draw(); drag = null; return; }
+          drag = { start: beat }; c.mutes = c.mutes || []; c.mutes.push([beat, beat + .5]); buzz(); draw();
+        }
+      });
+      cv.addEventListener('pointermove', e => {
+        if (!drag) return; const r = cv.getBoundingClientRect(), x = e.clientX - r.left; const inB = c.inBars || 0, endB = inB + c.lenBars;
+        if (drag === 'L') { const nb = Math.max(0, Math.min(endB - 1, Math.round(barOf(x)))); if (nb !== inB) { const d = nb - inB; c.inBars = nb; c.lenBars -= d; c.bar = Math.max(0, c.bar + d); c.mutes = (c.mutes || []).map(([m0, m1]) => [m0 - d * 4, m1 - d * 4]).filter(m => m[1] > 0); buzz(); draw(); } }
+        else if (drag === 'R') { const nb = Math.max(inB + 1, Math.min(srcBars, Math.round(barOf(x)))); if (nb !== endB) { c.lenBars = nb - inB; buzz(); draw(); } }
+        else if (drag.start != null) { const beat = Math.max(0, Math.min(c.lenBars * 4, Math.round((barOf(x) - inB) * 8) / 2)); const m = c.mutes[c.mutes.length - 1]; const a0 = Math.min(drag.start, beat), a1 = Math.max(drag.start, beat) + .5; if (m[0] !== a0 || m[1] !== a1) { m[0] = a0; m[1] = Math.min(c.lenBars * 4, a1); if (prevSnap !== a0 + ':' + a1) { prevSnap = a0 + ':' + a1; buzz(); } draw(); } }
+      });
+      const end = () => { if (drag && drag.start != null) { /* fusion des zones qui se touchent */ const ms = (c.mutes || []).sort((p, q) => p[0] - q[0]); const out = []; ms.forEach(m => { const l = out[out.length - 1]; if (l && m[0] <= l[1]) l[1] = Math.max(l[1], m[1]); else out.push(m.slice()); }); c.mutes = out; } drag = null; draw(); renderTimeline(); save(); };
+      cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+      b.querySelectorAll('[data-t]').forEach(x => x.onclick = () => { tool = x.dataset.t; cut = null; b.querySelectorAll('[data-t]').forEach(y => y.classList.toggle('on', y === x)); draw(); });
+      b.querySelector('#edCut').onclick = () => {
+        if ((c.loops || 1) > 1) { toast('Remets la boucle à ×1 pour couper ce bloc'); return; }
+        const inB = c.inBars || 0, k = cut - inB; const c2 = clone(c); c2.id = uid(); c2.inBars = cut; c2.bar = c.bar + k; c2.lenBars = c.lenBars - k; c2.loops = 1;
+        c2.mutes = (c.mutes || []).map(([m0, m1]) => [m0 - k * 4, m1 - k * 4]).filter(m => m[1] > 0).map(m => [Math.max(0, m[0]), m[1]]);
+        c.mutes = (c.mutes || []).filter(m => m[0] < k * 4).map(m => [m[0], Math.min(m[1], k * 4)]); c.lenBars = k; c.loops = 1;
+        P.clips.push(c2); cut = null; buzz(); renderTimeline(); save(); closeSheet(); toast('✂️ Coupé en deux blocs, touche celui que tu veux enlever', undo);
+      };
+      b.querySelector('#edPlay').onclick = () => { closeSheet(); play(c.bar); };
+      b.querySelector('#edDone').onclick = () => { closeSheet(); commit(); };
+      b.querySelector('#edReset').onclick = () => { c.inBars = 0; c.mutes = []; c.lenBars = c.kind === 'audio' ? srcBars : (c.srcBars || c.lenBars); cut = null; draw(); renderTimeline(); save(); };
+      requestAnimationFrame(draw);
     });
   }
 
@@ -842,7 +919,7 @@ registerProcessor('labo-cap',Cap);`;
     });
   };
   $('menuBtn').onclick = () => {
-    openSheet(`<div class="sh-t"><span class="em">🧪</span>Le labo</div>
+    openSheet(`<div class="sh-t"><span class="em">🧪</span>Le labo <small style="font-family:Space Grotesk;font-size:13px;opacity:.6;margin-left:auto">version ${VERSION}</small></div>
       <div class="reclist">
         <button class="recitem" id="mExp"><span class="ae">💾</span><span><b>Exporter en WAV</b><small>Pour l'envoyer ou l'ouvrir dans ton logiciel</small></span></button>
         <button class="recitem" id="mNew"><span class="ae">✨</span><span><b>Nouvelle maquette</b><small>Repartir d'une page blanche</small></span></button>
@@ -891,6 +968,8 @@ registerProcessor('labo-cap',Cap);`;
     AC.onstatechange = () => { if (AC.state === 'interrupted' || AC.state === 'suspended') { if (player && player.playing && !recState) stop(); } };
     $('openBtn').textContent = '…';
     await DB.open();
+    const dv = await DB.get('kv', 'device'); if (dv) { if (DEV.latHow === 'défaut' && dv.lat != null) { DEV.lat = dv.lat; DEV.latHow = dv.latHow; } if (!DEV.micId && dv.micId) DEV.micId = dv.micId; if (dv.awake === false && DEV.awake == null) DEV.awake = false; } saveDev();
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
     const cv = await DB.get('kv', 'countVoice'); if (cv && cv.parts) window.LABO_CUSTOM = cv;
     const saved = await DB.get('kv', 'project');
     if (saved && saved.v === 1) {

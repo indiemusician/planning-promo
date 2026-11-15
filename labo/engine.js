@@ -268,18 +268,27 @@
       const E = this.E, ac = E.ac, rep = c.lenBars * this.barDur(), dest = E.chain(tr).in;
       if (c.kind === 'audio') {
         const buf = this.h.buffer && this.h.buffer(c, tr); if (!buf) return;
+        const cin = (c.inBars || 0) * this.barDur();
         let when = t + (c.nudge || 0) / 1000, off = offset;
         if (when < t && offset === 0) { off += t - when; when = t; }
         if (when < ac.currentTime) { off += ac.currentTime - when; when = ac.currentTime; }
-        const dur = Math.min(buf.duration - off, rep - offset); if (dur <= .02) return;
-        const s = ac.createBufferSource(); s.buffer = buf; const g = ac.createGain(); g.gain.value = c.gain == null ? 1 : c.gain;
-        g.gain.setValueAtTime(g.gain.value, when + dur - .015); g.gain.linearRampToValueAtTime(0, when + dur);
-        s.connect(g); g.connect(dest); s.start(when, off, dur); this.src.push(s);
-        if (tr.fx && tr.fx.echo && this.h.env) E.duck(tr, this.h.env(c), when, off, dur);
+        if (cin + off < 0) { when -= cin + off; off = -cin; }
+        const dur = Math.min(buf.duration - cin - off, rep - offset); if (dur <= .02) return;
+        const s = ac.createBufferSource(); s.buffer = buf; const g = ac.createGain(); const gv = c.gain == null ? 1 : c.gain; g.gain.value = gv;
+        const beat = this.barDur() / 4;
+        (c.mutes || []).slice().sort((x, y) => x[0] - y[0]).forEach(([a, b]) => {
+          const st = Math.max(when, when + a * beat - off), en = Math.min(when + dur, when + b * beat - off); if (en <= st + .005) return;
+          g.gain.setValueAtTime(gv, st); g.gain.linearRampToValueAtTime(0, st + .008); g.gain.setValueAtTime(0, Math.max(st + .008, en - .008)); g.gain.linearRampToValueAtTime(gv, en);
+        });
+        g.gain.setValueAtTime(gv, when + dur - .015); g.gain.linearRampToValueAtTime(0, when + dur);
+        s.connect(g); g.connect(dest); s.start(when, cin + off, dur); this.src.push(s);
+        if (tr.fx && tr.fx.echo && this.h.env) E.duck(tr, this.h.env(c), when, cin + off, dur);
       } else if (c.kind === 'inst') {
         const sd = this.stepDur();
+        const ins = (c.inBars || 0) * 16, mutes = c.mutes || [];
         (c.notes || []).forEach(n => {
-          const ns = n.s * sd; if (ns >= rep || ns < offset) return;
+          const sr = n.s - ins; if (sr < 0) return; if (mutes.some(([a, b]) => sr / 4 >= a && sr / 4 < b)) return;
+          const ns = sr * sd; if (ns >= rep || ns < offset) return;
           const dur = Math.max(.05, Math.min(n.l * sd, rep - ns) * .94);
           const nodes = E.note(tr.inst || 'synthe', n.m + (c.oct || 0) * 12, t + ns - offset, dur, n.v || .9, dest);
           this.src.push.apply(this.src, nodes);

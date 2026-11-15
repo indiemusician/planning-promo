@@ -1,5 +1,5 @@
 /* Le Labo : petit service worker — l'appli s'ouvre même avec un réseau capricieux */
-const CACHE = 'labo-v15';
+const CACHE = 'labo-v16';
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {
