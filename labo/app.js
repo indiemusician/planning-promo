@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 12;
+  const VERSION = 13;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } DB.put('kv', 'device', DEV); };
@@ -686,73 +686,101 @@ registerProcessor('labo-cap',Cap);`;
   }
 
   /* ---------- éditeur tactile ---------- */
+  /* la sélection est gardée en temps (beats) : précise au millième, sans casser la grille des mesures */
+  function setSel(c, S, Eb) {
+    const oldIn = c.inBars || 0, nin = Math.max(0, Math.floor(S / 4 + 1e-6)), d = nin - oldIn;
+    if (d) { c.mutes = (c.mutes || []).map(([m0, m1]) => [m0 - d * 4, m1 - d * 4]).filter(m => m[1] > 0).map(m => [Math.max(0, m[0]), m[1]]); c.bar = Math.max(0, c.bar + d); }
+    c.inBars = nin; c.trimA = +(S - nin * 4).toFixed(4); if (c.trimA < 1e-3) c.trimA = 0;
+    c.lenBars = Math.max(1, Math.ceil((Eb - nin * 4) / 4 - 1e-6)); const tb = +(Eb - nin * 4).toFixed(4); c.trimB = tb >= c.lenBars * 4 - 1e-3 ? null : tb;
+  }
+  const selOf = c => { const i = (c.inBars || 0) * 4; return [i + (c.trimA || 0), i + (c.trimB != null ? c.trimB : c.lenBars * 4)]; };
   function openEditor(id) {
     const c = P.clips.find(x => x.id === id); if (!c) return; const t = P.tracks.find(x => x.id === c.trackId);
-    stop(); snap(); let undoMark = hist.length;
-    const bd = barDur(), a = c.kind === 'audio' ? AUD[c.audioId] : null;
+    stop(); snap();
+    const bd = barDur(), beatS = bd / 4, a = c.kind === 'audio' ? AUD[c.audioId] : null;
     const srcBars = c.kind === 'audio' ? Math.max(1, Math.ceil(a.data.length / a.sr / bd - .05)) : (c.srcBars = c.srcBars || Math.max((c.inBars || 0) + c.lenBars, Math.ceil(Math.max(0, ...(c.notes || []).map(n => n.s + n.l)) / 16)));
-    let tool = 'trim', cut = null, prevSnap = null;
-    const buzz = () => { if (navigator.vibrate) navigator.vibrate(8); };
+    const SB = srcBars * 4; let vA = 0, vB = SB, tool = 'trim', cut = null, grid = P.edGrid || 1, lastBuzz = null;
+    const GRIDS = [[4, 'Mesure'], [1, 'Temps'], [.5, '½ temps'], [.25, '¼'], [0, 'Libre']];
+    const buzz = k => { if (k !== lastBuzz && navigator.vibrate) navigator.vibrate(6); lastBuzz = k; };
+    const snapB = x => grid ? Math.round(x / grid) * grid : Math.round(x * 64) / 64;
+    const lab = x => { const bar = Math.floor(x / 4 + 1e-6), bt = x - bar * 4, fr = bt % 1; const ft = fr < .02 || fr > .98 ? '' : Math.abs(fr - .5) < .02 ? '½' : Math.abs(fr - .25) < .02 ? '¼' : Math.abs(fr - .75) < .02 ? '¾' : '+'; return 'mes. ' + (bar + 1) + (bt > .02 ? ' · temps ' + (Math.floor(bt + .02) + 1) + ft : ''); };
     openSheet(`<div class="sh-t"><span class="em">✂️</span>Éditer · ${c.label || t.name}</div>
       <div class="tabs" id="edTabs"><button data-t="trim" class="on">↔️ Raccourcir</button><button data-t="cut">✂️ Couper</button><button data-t="erase">🧽 Effacer</button></div>
-      <p class="sh-p" id="edHelp" style="font-size:13px;margin:10px 0 8px"></p>
-      <div style="position:relative;border-radius:16px;overflow:hidden;border:3px solid var(--cream);background:var(--navy3)"><canvas id="edCv" style="display:block;width:100%;height:170px;touch-action:none"></canvas></div>
-      <div class="row" style="margin-top:12px"><b id="edInfo" style="font-size:14px"></b><button class="btn" id="edCut" hidden style="padding:10px 14px">✂️ Couper ici</button></div>
+      <p class="sh-p" id="edHelp" style="font-size:12.5px;margin:10px 0 8px"></p>
+      <div style="position:relative;border-radius:16px;overflow:hidden;border:3px solid var(--cream);background:var(--navy3)"><canvas id="edCv" style="display:block;width:100%;height:190px;touch-action:none"></canvas></div>
+      <div class="row" style="margin-top:10px;gap:8px"><div class="chips" id="edGrid" style="gap:6px">${GRIDS.map(([v, l]) => `<button class="chip ${v === grid ? 'on' : ''}" data-g="${v}" style="padding:7px 10px;font-size:12.5px">${l}</button>`).join('')}</div></div>
+      <div class="row" style="margin-top:10px"><div class="stepper" style="gap:8px"><button id="edZo" style="width:40px;height:40px">−</button><b style="font-size:13px;min-width:70px" id="edZ">🔍 ×1</b><button id="edZi" style="width:40px;height:40px">+</button></div><button class="mini" id="edAll">Tout voir</button></div>
+      <div class="row" style="margin-top:10px"><b id="edInfo" style="font-size:14px"></b><button class="btn" id="edCut" hidden style="padding:10px 14px">✂️ Couper ici</button></div>
       <div class="row" style="margin-top:12px"><button class="btn ghost" id="edPlay" style="flex:1">▶ Écouter</button><button class="btn yel" id="edDone" style="flex:1">✓ Terminé</button></div>
       <button class="danger" id="edReset">Tout remettre comme avant</button>`, b => {
-      const cv = b.querySelector('#edCv'), g = cv.getContext('2d'); const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const W = () => cv.clientWidth, H = 170, PAD = 22;
-      const xOf = bar => PAD + bar / srcBars * (W() - 2 * PAD), barOf = x => (x - PAD) / (W() - 2 * PAD) * srcBars;
-      const helps = { trim: 'Attrape les poignées jaunes et glisse-les pour garder seulement le morceau qui te plaît. Ça se cale tout seul sur les mesures.', cut: 'Touche l\'endroit où couper, puis « Couper ici ». Tu obtiens deux blocs que tu peux déplacer ou supprimer.', erase: 'Passe ton doigt sur un passage raté pour le rendre muet. Touche une zone hachurée pour la remettre.' };
-      let peaks = null;
-      if (a) { const n = 400; peaks = new Float32Array(n); let mx = 1e-4; const tot = srcBars * bd * a.sr; for (let i = 0; i < n; i++) { const s0 = Math.floor(i / n * tot), s1 = Math.min(a.data.length, Math.floor((i + 1) / n * tot)); let m = 0; for (let j = s0; j < s1; j += 6) { const v = Math.abs(a.data[j]); if (v > m) m = v; } peaks[i] = m; if (m > mx) mx = m; } for (let i = 0; i < n; i++) peaks[i] /= mx; }
+      const cv = b.querySelector('#edCv'), g = cv.getContext('2d'); const dpr = Math.min(2, window.devicePixelRatio || 1), H = 190, TOP = 20, PAD = 16;
+      const W = () => cv.clientWidth;
+      const xOf = x => PAD + (x - vA) / (vB - vA) * (W() - 2 * PAD), bOf = px => vA + (px - PAD) / (W() - 2 * PAD) * (vB - vA);
+      const helps = { trim: 'Glisse les poignées jaunes. Pince avec deux doigts (ou 🔍 +) pour zoomer et être plus précis.', cut: 'Touche ou glisse pour placer les ciseaux, puis « Couper ici ».', erase: 'Passe le doigt sur un passage raté pour le rendre muet. Touche une zone hachurée pour la remettre. Deux doigts pour zoomer.' };
       function draw() {
         const w = W(); cv.width = w * dpr; cv.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, H);
-        const inB = c.inBars || 0, endB = inB + c.lenBars;
-        for (let i = 0; i <= srcBars; i++) { const x = xOf(i); g.fillStyle = 'rgba(246,236,214,.12)'; g.fillRect(x, 18, 1, H - 18); if (i < srcBars && (srcBars <= 16 || i % 2 === 0)) { g.fillStyle = 'rgba(246,236,214,.5)'; g.font = '700 10px Space Grotesk, sans-serif'; g.fillText(String(i + 1), x + 4, 13); } }
-        g.fillStyle = t.color;
-        if (peaks) { const n = peaks.length; for (let i = 0; i < n; i++) { const x = PAD + i / n * (w - 2 * PAD), hh = Math.max(1, peaks[i] * (H - 50) / 2); g.fillRect(x, 18 + (H - 18) / 2 - hh, Math.max(1, (w - 2 * PAD) / n - .5), hh * 2); } }
-        else { const ns = c.notes || []; let lo = 127, hi = 0; ns.forEach(n => { lo = Math.min(lo, n.m); hi = Math.max(hi, n.m); }); const rng = Math.max(8, hi - lo + 2); ns.forEach(n => { const x0 = xOf(n.s / 16), x1 = xOf((n.s + n.l) / 16); const y = H - 14 - (n.m - lo + 1) / rng * (H - 50); g.beginPath(); g.roundRect ? g.roundRect(x0, y, Math.max(3, x1 - x0 - 1), 7, 3) : g.rect(x0, y, Math.max(3, x1 - x0 - 1), 7); g.fill(); }); }
-        g.fillStyle = 'rgba(7,10,31,.72)'; g.fillRect(0, 18, xOf(inB), H); g.fillRect(xOf(endB), 18, w - xOf(endB), H);
-        (c.mutes || []).forEach(([m0, m1]) => { const x0 = xOf(inB + m0 / 4), x1 = xOf(inB + m1 / 4); g.save(); g.beginPath(); g.rect(x0, 18, x1 - x0, H); g.clip(); g.fillStyle = 'rgba(7,10,31,.55)'; g.fillRect(x0, 18, x1 - x0, H); g.strokeStyle = 'rgba(239,59,74,.9)'; g.lineWidth = 3; for (let k = -H; k < x1 - x0 + H; k += 12) { g.beginPath(); g.moveTo(x0 + k, 18); g.lineTo(x0 + k + H, H + 18); g.stroke(); } g.restore(); });
-        g.strokeStyle = '#ffd23f'; g.lineWidth = 3; g.strokeRect(xOf(inB) + 1.5, 19.5, xOf(endB) - xOf(inB) - 3, H - 21);
-        [xOf(inB), xOf(endB)].forEach((x, k) => { g.fillStyle = '#ffd23f'; g.beginPath(); g.roundRect ? g.roundRect(x - 9, H / 2 - 24, 18, 58, 8) : g.rect(x - 9, H / 2 - 24, 18, 58); g.fill(); g.fillStyle = '#070a1f'; g.fillRect(x - 3, H / 2 - 6, 2, 22); g.fillRect(x + 1, H / 2 - 6, 2, 22); });
-        if (tool === 'cut' && cut != null) { const x = xOf(cut); g.fillStyle = '#fff'; g.fillRect(x - 1.5, 18, 3, H); g.font = '20px sans-serif'; g.fillText('✂️', x - 11, H - 6); }
-        b.querySelector('#edInfo').textContent = tool === 'cut' ? (cut != null ? 'Coupe à la mesure ' + (c.bar + cut - inB + 1) : 'Touche où couper') : `Garde ${c.lenBars} mesure${c.lenBars > 1 ? 's' : ''}` + ((c.mutes || []).length ? ` · ${(c.mutes || []).length} passage(s) effacé(s)` : '');
+        const [S, Eb] = selOf(c), inB = (c.inBars || 0) * 4, pxBeat = (w - 2 * PAD) / (vB - vA);
+        for (let x = Math.floor(vA * 2) / 2; x <= vB; x += .5) {
+          const isBar = Math.abs(x % 4) < 1e-6, isBeat = Math.abs(x % 1) < 1e-6; if (!isBar && !(isBeat && pxBeat > 12) && !(pxBeat > 40)) continue;
+          const px = xOf(x); g.fillStyle = isBar ? 'rgba(246,236,214,.28)' : isBeat ? 'rgba(246,236,214,.12)' : 'rgba(246,236,214,.06)'; g.fillRect(px, TOP, 1, H - TOP);
+          if (isBar && (pxBeat * 4 > 22 || (x / 4) % 2 === 0)) { g.fillStyle = 'rgba(246,236,214,.6)'; g.font = '700 10px Space Grotesk, sans-serif'; g.fillText(String(x / 4 + 1), px + 3, 13); }
+        }
+        g.fillStyle = t.color; const mid = TOP + (H - TOP) / 2;
+        if (a) { const cols = Math.floor(w - 2 * PAD); let mx = 1e-4; const pk = new Float32Array(cols); for (let i = 0; i < cols; i++) { const s0 = Math.floor((vA + i / cols * (vB - vA)) * beatS * a.sr), s1 = Math.min(a.data.length, Math.floor((vA + (i + 1) / cols * (vB - vA)) * beatS * a.sr)); const st = Math.max(1, Math.floor((s1 - s0) / 300)); let m = 0; for (let j = Math.max(0, s0); j < s1; j += st) { const v = Math.abs(a.data[j]); if (v > m) m = v; } pk[i] = m; if (m > mx) mx = m; } if (!a.edMax) { let gm = 1e-4; for (let j = 0; j < a.data.length; j += 16) gm = Math.max(gm, Math.abs(a.data[j])); a.edMax = gm; } for (let i = 0; i < cols; i++) { const hh = Math.max(.8, pk[i] / a.edMax * (H - TOP - 26) / 2); g.fillRect(PAD + i, mid - hh, 1, hh * 2); } }
+        else { const ns = c.notes || []; let lo = 127, hi = 0; ns.forEach(n => { lo = Math.min(lo, n.m); hi = Math.max(hi, n.m); }); const rng = Math.max(8, hi - lo + 2); ns.forEach(n => { const x0 = xOf(n.s / 4), x1 = xOf((n.s + n.l) / 4); if (x1 < 0 || x0 > w) return; const y = H - 14 - (n.m - lo + 1) / rng * (H - TOP - 30); g.fillRect(x0, y, Math.max(3, x1 - x0 - 1), 7); }); }
+        g.fillStyle = 'rgba(7,10,31,.74)'; g.fillRect(0, TOP, Math.max(0, xOf(S)), H); g.fillRect(xOf(Eb), TOP, w, H);
+        (c.mutes || []).forEach(([m0, m1]) => { const x0 = xOf(inB + m0), x1 = xOf(inB + m1); g.save(); g.beginPath(); g.rect(x0, TOP, x1 - x0, H); g.clip(); g.fillStyle = 'rgba(7,10,31,.5)'; g.fillRect(x0, TOP, x1 - x0, H); g.strokeStyle = 'rgba(239,59,74,.9)'; g.lineWidth = 3; for (let k = -H; k < x1 - x0 + H; k += 12) { g.beginPath(); g.moveTo(x0 + k, TOP); g.lineTo(x0 + k + H, H + TOP); g.stroke(); } g.restore(); });
+        g.strokeStyle = '#ffd23f'; g.lineWidth = 3; g.strokeRect(xOf(S) + 1.5, TOP + 1.5, xOf(Eb) - xOf(S) - 3, H - TOP - 3);
+        [xOf(S), xOf(Eb)].forEach(x => { g.fillStyle = '#ffd23f'; g.fillRect(x - 10, mid - 30, 20, 60); g.fillStyle = '#070a1f'; g.fillRect(x - 4, mid - 10, 2, 20); g.fillRect(x + 2, mid - 10, 2, 20); });
+        if (tool === 'cut' && cut != null) { const x = xOf(cut); g.fillStyle = '#fff'; g.fillRect(x - 1.5, TOP, 3, H); g.font = '20px sans-serif'; g.fillText('✂️', x - 11, H - 6); }
+        const zoom = SB / (vB - vA); b.querySelector('#edZ').textContent = '🔍 ×' + (zoom < 10 ? zoom.toFixed(zoom % 1 ? 1 : 0) : Math.round(zoom));
+        b.querySelector('#edInfo').textContent = tool === 'cut' ? (cut != null ? '✂️ ' + lab(cut) : 'Touche où couper') : 'De ' + lab(S) + ' à ' + lab(Eb) + ((c.mutes || []).length ? ' · ' + c.mutes.length + ' effacé(s)' : '');
         b.querySelector('#edCut').hidden = !(tool === 'cut' && cut != null);
         b.querySelector('#edHelp').textContent = helps[tool];
       }
-      let drag = null;
+      const zoomAt = (f, cx) => { const span = Math.max(.5, Math.min(SB, (vB - vA) / f)); const c0 = cx == null ? (vA + vB) / 2 : cx; let na = c0 - (c0 - vA) / (vB - vA) * span; na = Math.max(0, Math.min(SB - span, na)); vA = na; vB = na + span; draw(); };
+      const pts = new Map(); let drag = null, pinch = null;
       cv.addEventListener('pointerdown', e => {
-        cv.setPointerCapture(e.pointerId); const r = cv.getBoundingClientRect(), x = e.clientX - r.left; const inB = c.inBars || 0, endB = inB + c.lenBars;
-        if (tool === 'trim') { const dl = Math.abs(x - xOf(inB)), dr = Math.abs(x - xOf(endB)); drag = dl < dr ? 'L' : 'R'; if (Math.min(dl, dr) > 60) drag = null; buzz(); }
-        else if (tool === 'cut') { const bb = Math.round(barOf(x)); if (bb > inB && bb < endB) { cut = bb; buzz(); } draw(); }
-        else if (tool === 'erase') {
-          const beat = Math.max(0, Math.min(c.lenBars * 4, Math.round((barOf(x) - inB) * 8) / 2));
-          const hit = (c.mutes || []).findIndex(([m0, m1]) => beat >= m0 && beat <= m1);
-          if (hit >= 0 && e.pointerType !== 'mouse-drag') { c.mutes.splice(hit, 1); buzz(); draw(); drag = null; return; }
-          drag = { start: beat }; c.mutes = c.mutes || []; c.mutes.push([beat, beat + .5]); buzz(); draw();
-        }
+        cv.setPointerCapture(e.pointerId); const r = cv.getBoundingClientRect(); pts.set(e.pointerId, e.clientX - r.left);
+        if (pts.size === 2) { if (drag && drag.erase) { c.mutes.pop(); } const xs = [...pts.values()]; pinch = { d: Math.abs(xs[0] - xs[1]), c: bOf((xs[0] + xs[1]) / 2), vA, vB }; drag = null; draw(); return; }
+        const x = e.clientX - r.left, [S, Eb] = selOf(c);
+        if (tool === 'trim') { const dl = Math.abs(x - xOf(S)), dr = Math.abs(x - xOf(Eb)); if (Math.min(dl, dr) < 44) drag = { h: dl <= dr ? 'L' : 'R', x0: x, v0: dl <= dr ? S : Eb }; else drag = { pan: true, x0: x, a0: vA }; }
+        else if (tool === 'cut') { const v = snapB(bOf(x)); if (v > S && v < Eb) { cut = v; buzz(v); } drag = { cut: true }; draw(); }
+        else { const inB = (c.inBars || 0) * 4, v = snapB(bOf(x)) - inB; const hit = (c.mutes || []).findIndex(([m0, m1]) => v >= m0 - 1e-6 && v <= m1 + 1e-6); if (hit >= 0) { c.mutes.splice(hit, 1); buzz('del' + hit); draw(); drag = null; return; } c.mutes = c.mutes || []; const st = grid || 1 / 16; c.mutes.push([v, v + st]); drag = { erase: true, start: v }; buzz(v); draw(); }
       });
       cv.addEventListener('pointermove', e => {
-        if (!drag) return; const r = cv.getBoundingClientRect(), x = e.clientX - r.left; const inB = c.inBars || 0, endB = inB + c.lenBars;
-        if (drag === 'L') { const nb = Math.max(0, Math.min(endB - 1, Math.round(barOf(x)))); if (nb !== inB) { const d = nb - inB; c.inBars = nb; c.lenBars -= d; c.bar = Math.max(0, c.bar + d); c.mutes = (c.mutes || []).map(([m0, m1]) => [m0 - d * 4, m1 - d * 4]).filter(m => m[1] > 0); buzz(); draw(); } }
-        else if (drag === 'R') { const nb = Math.max(inB + 1, Math.min(srcBars, Math.round(barOf(x)))); if (nb !== endB) { c.lenBars = nb - inB; buzz(); draw(); } }
-        else if (drag.start != null) { const beat = Math.max(0, Math.min(c.lenBars * 4, Math.round((barOf(x) - inB) * 8) / 2)); const m = c.mutes[c.mutes.length - 1]; const a0 = Math.min(drag.start, beat), a1 = Math.max(drag.start, beat) + .5; if (m[0] !== a0 || m[1] !== a1) { m[0] = a0; m[1] = Math.min(c.lenBars * 4, a1); if (prevSnap !== a0 + ':' + a1) { prevSnap = a0 + ':' + a1; buzz(); } draw(); } }
+        if (!pts.has(e.pointerId)) return; const r = cv.getBoundingClientRect(); pts.set(e.pointerId, e.clientX - r.left); const x = e.clientX - r.left;
+        if (pinch && pts.size >= 2) { const xs = [...pts.values()], d = Math.max(10, Math.abs(xs[0] - xs[1])); const span = Math.max(.5, Math.min(SB, (pinch.vB - pinch.vA) * pinch.d / d)); let na = pinch.c - (pinch.c - pinch.vA) / (pinch.vB - pinch.vA) * span; na = Math.max(0, Math.min(SB - span, na)); vA = na; vB = na + span; draw(); return; }
+        if (!drag) return; const [S, Eb] = selOf(c), dv = (x - drag.x0) / (W() - 2 * PAD) * (vB - vA);
+        if (drag.h) { const minLen = grid || .25; let v = snapB(drag.v0 + dv); if (drag.h === 'L') { v = Math.max(0, Math.min(Eb - minLen, v)); if (Math.abs(v - S) > 1e-6) { setSel(c, v, Eb); buzz(v); draw(); } } else { v = Math.max(S + minLen, Math.min(SB, v)); if (Math.abs(v - Eb) > 1e-6) { setSel(c, S, v); buzz(v); draw(); } }
+          if (x < 24 && vA > 0) { const sh = Math.min(vA, (vB - vA) * .02); vA -= sh; vB -= sh; drag.x0 += 0; } else if (x > W() - 24 && vB < SB) { const sh = Math.min(SB - vB, (vB - vA) * .02); vA += sh; vB += sh; } }
+        else if (drag.pan) { const span = vB - vA; let na = drag.a0 - (x - drag.x0) / (W() - 2 * PAD) * span; na = Math.max(0, Math.min(SB - span, na)); vA = na; vB = na + span; draw(); }
+        else if (drag.cut) { const v = snapB(bOf(x)); if (v > S && v < Eb && v !== cut) { cut = v; buzz(v); draw(); } }
+        else if (drag.erase) { const inB = (c.inBars || 0) * 4, v = Math.max(0, Math.min(c.lenBars * 4, snapB(bOf(x)) - inB)); const m = c.mutes[c.mutes.length - 1], st = grid || 1 / 16; const a0 = Math.min(drag.start, v), a1 = Math.min(c.lenBars * 4, Math.max(drag.start, v) + (v >= drag.start ? st : 0)); if (m[0] !== a0 || m[1] !== a1) { m[0] = a0; m[1] = Math.max(a0 + st, a1); buzz(a0 + ':' + a1); draw(); } }
       });
-      const end = () => { if (drag && drag.start != null) { /* fusion des zones qui se touchent */ const ms = (c.mutes || []).sort((p, q) => p[0] - q[0]); const out = []; ms.forEach(m => { const l = out[out.length - 1]; if (l && m[0] <= l[1]) l[1] = Math.max(l[1], m[1]); else out.push(m.slice()); }); c.mutes = out; } drag = null; draw(); renderTimeline(); save(); };
+      const end = e => {
+        pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (pts.size) return;
+        if (drag && drag.erase) { const ms = (c.mutes || []).sort((p, q) => p[0] - q[0]); const out = []; ms.forEach(m => { const l = out[out.length - 1]; if (l && m[0] <= l[1] + 1e-6) l[1] = Math.max(l[1], m[1]); else out.push(m.slice()); }); c.mutes = out; }
+        drag = null; draw(); renderTimeline(); save();
+      };
       cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
       b.querySelectorAll('[data-t]').forEach(x => x.onclick = () => { tool = x.dataset.t; cut = null; b.querySelectorAll('[data-t]').forEach(y => y.classList.toggle('on', y === x)); draw(); });
+      b.querySelectorAll('[data-g]').forEach(x => x.onclick = () => { grid = +x.dataset.g; P.edGrid = grid; b.querySelectorAll('[data-g]').forEach(y => y.classList.toggle('on', y === x)); if (grid && grid < 1 && SB / (vB - vA) < 2) { const [S] = selOf(c); zoomAt(SB / (vB - vA) < 1.5 ? 3 : 2, S); } draw(); save(); });
+      b.querySelector('#edZi').onclick = () => { const [S, Eb] = selOf(c); zoomAt(2, tool === 'cut' && cut != null ? cut : (S + Eb) / 2); };
+      b.querySelector('#edZo').onclick = () => zoomAt(.5);
+      b.querySelector('#edAll').onclick = () => { vA = 0; vB = SB; draw(); };
       b.querySelector('#edCut').onclick = () => {
         if ((c.loops || 1) > 1) { toast('Remets la boucle à ×1 pour couper ce bloc'); return; }
-        const inB = c.inBars || 0, k = cut - inB; const c2 = clone(c); c2.id = uid(); c2.inBars = cut; c2.bar = c.bar + k; c2.lenBars = c.lenBars - k; c2.loops = 1;
-        c2.mutes = (c.mutes || []).map(([m0, m1]) => [m0 - k * 4, m1 - k * 4]).filter(m => m[1] > 0).map(m => [Math.max(0, m[0]), m[1]]);
-        c.mutes = (c.mutes || []).filter(m => m[0] < k * 4).map(m => [m[0], Math.min(m[1], k * 4)]); c.lenBars = k; c.loops = 1;
-        P.clips.push(c2); cut = null; buzz(); renderTimeline(); save(); closeSheet(); toast('✂️ Coupé en deux blocs, touche celui que tu veux enlever', undo);
+        const [S, Eb] = selOf(c); const c2 = clone(c); c2.id = uid();
+        const inB = (c.inBars || 0) * 4, k = cut - inB;
+        c.mutes = (c.mutes || []).filter(m => m[0] < k).map(m => [m[0], Math.min(m[1], k)]);
+        c2.mutes = (c2.mutes || []).filter(m => m[1] > k);
+        setSel(c, S, cut); setSel(c2, cut, Eb); c2.loops = 1; c.loops = 1;
+        P.clips.push(c2); buzz('cut'); renderTimeline(); save(); closeSheet(); toast('✂️ Coupé en deux blocs : touche celui que tu veux enlever', undo);
       };
       b.querySelector('#edPlay').onclick = () => { closeSheet(); play(c.bar); };
       b.querySelector('#edDone').onclick = () => { closeSheet(); commit(); };
-      b.querySelector('#edReset').onclick = () => { c.inBars = 0; c.mutes = []; c.lenBars = c.kind === 'audio' ? srcBars : (c.srcBars || c.lenBars); cut = null; draw(); renderTimeline(); save(); };
+      b.querySelector('#edReset').onclick = () => { c.mutes = []; setSel(c, 0, c.kind === 'audio' ? SB : (c.srcBars || c.lenBars) * 4); c.trimA = 0; c.trimB = null; cut = null; vA = 0; vB = SB; draw(); renderTimeline(); save(); };
       requestAnimationFrame(draw);
     });
   }

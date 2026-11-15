@@ -276,7 +276,7 @@
         const dur = Math.min(buf.duration - cin - off, rep - offset); if (dur <= .02) return;
         const s = ac.createBufferSource(); s.buffer = buf; const g = ac.createGain(); const gv = c.gain == null ? 1 : c.gain; g.gain.value = gv;
         const beat = this.barDur() / 4;
-        (c.mutes || []).slice().sort((x, y) => x[0] - y[0]).forEach(([a, b]) => {
+        Labo.allMutes(c).forEach(([a, b]) => {
           const st = Math.max(when, when + a * beat - off), en = Math.min(when + dur, when + b * beat - off); if (en <= st + .005) return;
           g.gain.setValueAtTime(gv, st); g.gain.linearRampToValueAtTime(0, st + .008); g.gain.setValueAtTime(0, Math.max(st + .008, en - .008)); g.gain.linearRampToValueAtTime(gv, en);
         });
@@ -285,7 +285,7 @@
         if (tr.fx && tr.fx.echo && this.h.env) E.duck(tr, this.h.env(c), when, cin + off, dur);
       } else if (c.kind === 'inst') {
         const sd = this.stepDur();
-        const ins = (c.inBars || 0) * 16, mutes = c.mutes || [];
+        const ins = (c.inBars || 0) * 16, mutes = Labo.allMutes(c);
         (c.notes || []).forEach(n => {
           const sr = n.s - ins; if (sr < 0) return; if (mutes.some(([a, b]) => sr / 4 >= a && sr / 4 < b)) return;
           const ns = sr * sd; if (ns >= rep || ns < offset) return;
@@ -304,5 +304,7 @@
     timeOfBar(b) { return this.songStart + (b - this.fromBar) * this.barDur(); }
   }
 
-  root.Labo = { Engine, Player, makeFill, smartEcho, DRUM_ROWS, curve };
+  /* zones muettes d'un bloc (en temps) : effacements + début/fin raccourcis au temps près */
+  function allMutes(c) { const m = (c.mutes || []).map(x => x.slice()); if (c.trimA > 0) m.push([0, c.trimA]); if (c.trimB != null && c.trimB < c.lenBars * 4) m.push([c.trimB, c.lenBars * 4]); return m.sort((x, y) => x[0] - y[0]); }
+  root.Labo = { Engine, Player, makeFill, smartEcho, DRUM_ROWS, curve, allMutes };
 })(window);
