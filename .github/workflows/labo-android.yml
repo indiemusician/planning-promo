@@ -1,0 +1,37 @@
+name: Labo Android
+
+on:
+  push:
+    paths:
+      - 'labo-android/**'
+      - '.github/workflows/labo-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Compiler l'appli
+        working-directory: labo-android
+        run: gradle assembleRelease --no-daemon --stacktrace
+      - name: Préparer l'APK
+        run: cp labo-android/app/build/outputs/apk/release/app-release.apk labo.apk
+      - name: Publier
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: labo-android-${{ github.run_number }}
+          name: Labo Android ${{ github.run_number }}
+          body: Appli Android du Labo (moteur audio natif basse latence).
+          files: labo.apk
+          make_latest: true

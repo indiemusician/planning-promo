@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(labo_audio)
+find_package(oboe REQUIRED CONFIG)
+add_library(labo_audio SHARED engine.cpp)
+target_link_libraries(labo_audio oboe::oboe log)
