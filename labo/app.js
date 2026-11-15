@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 14;
+  const VERSION = 15;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   const saveDev = () => { try { localStorage.setItem('labo-device', JSON.stringify(DEV)); } catch (e) { } DB.put('kv', 'device', DEV); };
@@ -921,10 +921,26 @@ registerProcessor('labo-cap',Cap);`;
     let gmx = 0; segs.forEach(s => gmx = Math.max(gmx, s.pk));
     return segs.map(s => { const a = Math.max(0, (s.a - 2) * hop), b = Math.min(x.length, (s.b + 6) * hop); const d = x.slice(a, b); let pk = 0; d.forEach(v => pk = Math.max(pk, Math.abs(v))); const g = .9 / (pk || 1); const f = Math.round(sr * .012); for (let i = 0; i < d.length; i++) { d[i] *= g; if (i < 30) d[i] *= i / 30; if (i > d.length - f) d[i] *= (d.length - i) / f; } return d; });
   }
+  /* plan B : on découpe sur les temps attendus (on sait quand tu devais parler) */
+  function beatSplit(x, sr, beat, lead) {
+    let gm = 0; for (let i = 0; i < x.length; i += 4) gm = Math.max(gm, Math.abs(x[i])); if (gm < .01) return null;
+    const parts = [];
+    for (let i = 0; i < 4; i++) {
+      const a = Math.max(0, Math.floor((lead + i * beat - .08) * sr)), z = Math.min(x.length, Math.floor((lead + (i + 1) * beat - .08) * sr)); if (z - a < sr * .1) return null;
+      const w = x.slice(a, z); let pk = 0; w.forEach(v => pk = Math.max(pk, Math.abs(v))); if (pk < gm * .15) return null;
+      let s0 = 0, s1 = w.length - 1; while (s0 < w.length && Math.abs(w[s0]) < pk * .08) s0++; while (s1 > s0 && Math.abs(w[s1]) < pk * .04) s1--;
+      const d = w.slice(Math.max(0, s0 - Math.floor(sr * .005)), s1 + 1); const g = .9 / pk, f = Math.round(sr * .012);
+      for (let k = 0; k < d.length; k++) { d[k] *= g; if (k < 30) d[k] *= k / 30; if (k > d.length - f) d[k] *= (d.length - k) / f; }
+      parts.push(d);
+    }
+    return parts;
+  }
   function setCustomCount(parts, sr) { window.LABO_CUSTOM = { sr, parts }; DB.put('kv', 'countVoice', { sr, parts }); }
   function openVoiceCountSheet(back) {
     openSheet(`<div class="sh-t"><span class="em">🎙️</span>Une vraie voix pour compter</div>
-      <p class="sh-p">Le plus simple : enregistre-toi en disant <b>« un… deux… trois… quatre »</b> (ou « one, two, three, four »), en laissant un petit blanc entre chaque mot. Le labo découpe tout seul.</p>
+      <p class="sh-p">Tu entends d'abord 4 clics pour te caler. Ensuite, dis un mot sur chacun des 4 temps suivants : les mots s'affichent en grand et ton téléphone vibre sur chaque temps. Le labo découpe tout seul.</p>
+      <div class="chips" style="margin-bottom:10px"><button class="chip ${P.countLang !== 'en' ? 'on' : ''}" data-lg="fr">🇫🇷 Un, deux…</button><button class="chip ${P.countLang === 'en' ? 'on' : ''}" data-lg="en">🇬🇧 One, two…</button></div>
+      <div id="vcBig" style="display:none;text-align:center;margin:6px 0 12px;padding:18px 10px;border-radius:20px;background:var(--navy3);border:3px solid var(--cream)"><div id="vcPhase" style="font-weight:700;font-size:14px;opacity:.8"></div><div id="vcWord" style="font-family:Bungee;font-size:56px;line-height:1.1;margin-top:6px;color:var(--yellow)"></div><div id="vcDots" style="display:flex;justify-content:center;gap:10px;margin-top:10px"></div></div>
       <button class="btn red full" id="vcRec" style="font-family:Bungee;font-size:17px">● Enregistrer ma voix</button>
       <div class="blk"><label>Ou importer un fichier</label><p class="sh-p" style="font-size:13px;margin-bottom:8px">Un mémo vocal, ou une voix générée (ElevenLabs, etc.) qui dit les 4 chiffres.</p><label class="btn ghost full" style="position:relative;overflow:hidden">📁 Choisir un fichier audio<input type="file" accept="audio/*" id="vcFile" style="position:absolute;inset:0;opacity:0"></label></div>
       <div id="vcOut"></div>
@@ -937,11 +953,33 @@ registerProcessor('labo-cap',Cap);`;
         const t = AC.currentTime + .1, beat = Math.min(.55, 60 / P.bpm); for (let i = 0; i < 4; i++) E.click(t + i * beat, i === 0, 1, i);
       };
       b.querySelector('#vcBack').onclick = () => back ? back() : closeSheet();
-      const recBtn = b.querySelector('#vcRec'); let on = false;
+      b.querySelectorAll('[data-lg]').forEach(x => x.onclick = () => { P.countLang = x.dataset.lg; b.querySelectorAll('[data-lg]').forEach(y => y.classList.toggle('on', y === x)); save(); });
+      /* 4 clics pour se caler, puis tu dis « un, deux, trois, quatre » sur les 4 temps suivants
+         (les mots s'affichent en grand et le téléphone vibre sur chaque temps, sans clic pour ne pas salir la prise) */
+      const recBtn = b.querySelector('#vcRec'); let busyRec = false;
       recBtn.onclick = async () => {
-        AC.resume();
-        if (!on) { if (!(await needMic())) return; Mic.start(); on = true; recBtn.textContent = '■ Stop (dis 1… 2… 3… 4…)'; setTimeout(() => { if (on) recBtn.click(); }, 7000); return; }
-        on = false; recBtn.textContent = '● Recommencer'; const r = await Mic.stop(); done(splitCount(r.data, r.sr), r.sr);
+        AC.resume(); if (busyRec) return; if (!(await needMic())) return;
+        busyRec = true; recBtn.disabled = true; recBtn.style.opacity = .5;
+        const big = b.querySelector('#vcBig'), ph = b.querySelector('#vcPhase'), wd = b.querySelector('#vcWord'), dots = b.querySelector('#vcDots'); big.style.display = 'block';
+        dots.innerHTML = '<i></i><i></i><i></i><i></i>'; dots.querySelectorAll('i').forEach(i => { i.style.cssText = 'width:16px;height:16px;border-radius:50%;background:rgba(246,236,214,.2);display:block'; });
+        const beat = 60 / 90, t0 = AC.currentTime + .4, words = (P.clickMode === 'en' || /one/i.test(P.countLang || '')) ? ['ONE', 'TWO', 'THREE', 'FOUR'] : ['UN', 'DEUX', 'TROIS', 'QUATRE'];
+        const saved = E.clickMode; E.clickMode = 'clic'; for (let i = 0; i < 4; i++) E.click(t0 + i * beat, i === 0); E.clickMode = saved;
+        const recAt = t0 + 4 * beat - .05, endAt = t0 + 8 * beat + .5; let started = false, last = -1;
+        const tick = () => {
+          const now = AC.currentTime;
+          if (!started && now >= recAt) { Mic.start(); started = true; }
+          const k = Math.floor((now - t0) / beat);
+          if (k !== last && k >= 0 && k < 8) { last = k; const n = k % 4;
+            dots.querySelectorAll('i').forEach((d, j) => d.style.background = j === n ? (k < 4 ? 'var(--cream)' : 'var(--red)') : 'rgba(246,236,214,.2)');
+            if (k < 4) { ph.textContent = 'Écoute le tempo…'; wd.textContent = String(n + 1); wd.style.color = 'var(--cream)'; }
+            else { ph.textContent = '🎙️ À toi, dis :'; wd.textContent = words[n]; wd.style.color = 'var(--yellow)'; if (navigator.vibrate) navigator.vibrate(35); }
+            wd.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 160 });
+          }
+          if (now < endAt) { requestAnimationFrame(tick); return; }
+          Mic.stop().then(r => { busyRec = false; recBtn.disabled = false; recBtn.style.opacity = 1; recBtn.textContent = '● Recommencer'; big.style.display = 'none'; done(splitCount(r.data, r.sr) || beatSplit(r.data, r.sr, beat, .05 + (DEV.inLat || 0)), r.sr); });
+        };
+        if (k0()) requestAnimationFrame(tick);
+        function k0() { ph.textContent = 'Prépare-toi…'; wd.textContent = ''; return true; }
       };
       b.querySelector('#vcFile').onchange = async e => {
         const f = e.target.files[0]; if (!f) return; out.innerHTML = '<div class="blk">🎧 J\'écoute…</div>';
