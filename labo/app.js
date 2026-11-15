@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 22;
+  const VERSION = 23;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -564,7 +564,9 @@ registerProcessor('labo-cap',Cap);`;
     const mode = P.recMode || (P.headphones ? 'hp' : 'soft');
     if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
     player.start(startBar, { countIn, recording: true, quiet: mode === 'click', skip: replace || null });
-    if (mode === 'hp' && P.monitor !== false) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
+    const monOn = mode === 'hp' && P.monitor !== false; if (monOn) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
+    const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
+    rm.onclick = () => { if (Mic.mon) { Mic.monitor(false); P.monitor = false; } else { Mic.monitor(true, P.monVol == null ? .9 : P.monVol); P.monitor = true; } save(); upd(); };
     recState = { type, startBar, countIn, len, replace }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
   }
@@ -640,6 +642,7 @@ registerProcessor('labo-cap',Cap);`;
       <p class="sh-p">Les écouteurs (surtout en Bluetooth) ont un petit retard. Le labo le mesure une fois, puis recale toutes tes prises tout seul. À refaire si tu changes d'écouteurs.</p>
       <div class="blk"><label>Micro qui enregistre</label><div class="chips" id="syMics"><span class="sh-p" style="margin:0;font-size:13px">Touche « Choisir » pour voir les micros.</span></div><button class="btn ghost full" id="syMicBtn" style="margin-top:8px">🎙️ Choisir le micro</button>
         <p class="sh-p" style="font-size:12px;margin:8px 0 0">Prends le micro du téléphone : il enregistre bien mieux que celui des écouteurs. Selon le téléphone, les écouteurs Bluetooth peuvent quand même passer en qualité « appel » pendant la prise.</p></div>
+      <div class="blk"><label>Tester le retour</label><p class="sh-p" style="font-size:13px">Écouteurs sur les oreilles : pendant 6 secondes, tu dois t'entendre parler ou jouer dans les écouteurs.</p><button class="btn full" id="syMon">🎧 Tester : je m'entends ?</button></div>
       <div class="blk"><label>Mesure précise (conseillée)</label><p class="sh-p" style="font-size:13px">Mets tes écouteurs, puis colle un écouteur contre le bas du téléphone, là où est le micro. Le labo joue 8 clics et chronomètre le temps qu'ils mettent à revenir.</p><button class="btn yel full" id="syLoop">🔁 Lancer la mesure</button></div>
       <div class="blk"><label>Ou au rythme</label><p class="sh-p" style="font-size:13px">Écouteurs sur les oreilles : tape sur le bouton pile en même temps que chaque clic que tu entends (12 clics).</p><button class="btn full" id="syTap" style="height:84px;font-family:Bungee;font-size:18px">👆 Démarrer</button></div>
       <div id="syOut"></div>
@@ -654,6 +657,11 @@ registerProcessor('labo-cap',Cap);`;
         const w = b.querySelector('#syMics'); w.innerHTML = '';
         const opts = [{ deviceId: '', label: 'Automatique' }].concat(list.filter(d => d.deviceId && d.deviceId !== 'default'));
         opts.forEach((d, i) => { const c = document.createElement('button'); c.className = 'chip' + ((DEV.micId || '') === d.deviceId ? ' on' : ''); const lb = d.label || ''; c.textContent = !d.deviceId ? 'Automatique' : /bluetooth|headset|hands-?free|airpods|buds|casque|écouteur|ecouteur|sco/i.test(lb) ? '🎧 Micro des écouteurs (déconseillé)' : /speaker|built-?in|bottom|interne|phone|téléphone|telephone|microphone$/i.test(lb) ? '📱 Micro du téléphone' + (/back|arrière|top|haut/i.test(lb) ? ' (2)' : '') : (lb || ('Micro ' + i)); c.title = lb; c.onclick = () => { DEV.micId = d.deviceId || null; saveDev(); w.querySelectorAll('.chip').forEach(y => y.classList.toggle('on', y === c)); toast('🎙️ ' + c.textContent); }; w.appendChild(c); });
+      };
+      b.querySelector('#syMon').onclick = async e => {
+        const btn = e.currentTarget; AC.resume(); if (!(await needMic())) return; if (AC.state !== 'running') await AC.resume();
+        Mic.monitor(true, P.monVol == null ? .9 : P.monVol); btn.textContent = '🎙️ Parle ou joue… (6 s)';
+        setTimeout(() => { Mic.release(); btn.textContent = '🎧 Tester : je m\'entends ?'; out.innerHTML = '<div class="blk sh-p" style="margin-bottom:0">Tu t\'es entendu ? Si oui, tout est prêt. Si non, dis-le-moi en précisant tes écouteurs (Bluetooth ou filaires) : c\'est que ton téléphone bloque le retour.</div>'; }, 6000);
       };
       b.querySelector('#syLoop').onclick = async () => {
         AC.resume(); if (!(await needMic())) return;
@@ -1127,6 +1135,7 @@ registerProcessor('labo-cap',Cap);`;
 
   function renderAll() { $('projName').value = P.name; renderTimeline(); renderIdeas(); updatePlayBtn(); }
 
+  window.LaboDebug = { Mic, get P() { return P; }, get E() { return E; } };
   /* ---------- démarrage ---------- */
   $('installBtn').hidden = isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
   $('installBtn').onclick = () => installApp();

@@ -236,3 +236,5 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 
 body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .clip .mz{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(-45deg,rgba(7,10,31,.55) 0 5px,rgba(7,10,31,.35) 5px 10px);z-index:1;pointer-events:none}
+.rp-mon{grid-column:1/-1;padding:10px;border-radius:12px;background:rgba(7,10,31,.35);border:2px solid var(--cream);font-weight:700;font-size:14px;color:var(--cream)}
+.rp-mon.off{opacity:.6;border-style:dashed}
