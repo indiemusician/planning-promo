@@ -319,7 +319,12 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     if (out) out.innerHTML = `<div class="blk sh-p" style="margin-bottom:0">📲 ${msg}<br><br>Ensuite, ouvre le Labo depuis son icône : il s'ouvre en plein écran, comme une vraie appli.</div>`;
     else openSheet(`<div class="sh-t"><span class="em">📲</span>Installer le Labo</div><p class="sh-p">${msg}</p><p class="sh-p">Ensuite, ouvre-le depuis son icône : il s'ouvre en plein écran, comme une vraie appli.</p><button class="btn full" data-close>OK</button>`);
   }
-  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => { }));
+    /* nouvelle version installée : on recharge tout seul (jamais pendant une prise ou une lecture) */
+    let reloading = false; const hadCtrl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!hadCtrl || reloading) return; const go = () => { if (recState || (player && player.playing)) { setTimeout(go, 3000); return; } reloading = true; location.reload(); }; go(); });
+  }
   function play(from) { if (acMode === 'fast' && DEV.audioMode !== 'fast' && !recState) setLatency('stable'); if (AC.state !== 'running') AC.resume(); applyTracks(); player.start(from == null ? P.cursor : from, {}); updatePlayBtn(); keepAwake(true); }
   function stop() { if (practice) { endPractice(false); return; } player.stop(); updatePlayBtn(); if (!recState) keepAwake(false); }
   function updatePlayBtn() { $('playBtn').classList.toggle('on', player.playing && !player.opt.preview); $('loopBtn').classList.toggle('on', P.loop); }
