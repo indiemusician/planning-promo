@@ -13,7 +13,7 @@ android {
         targetSdk = 34
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
-        externalNativeBuild { cmake { cppFlags += listOf("-std=c++17", "-O2") } }
+        externalNativeBuild { cmake { cppFlags += listOf("-std=c++17", "-O2"); arguments += listOf("-DANDROID_STL=c++_shared") } }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
