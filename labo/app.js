@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 25;
+  const VERSION = 26;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -157,6 +157,26 @@ registerProcessor('labo-cap',Cap);`;
     },
     level() { if (!this.an) return 0; const d = new Float32Array(this.an.fftSize); this.an.getFloatTimeDomainData(d); let s = 0, pk = 0; for (let i = 0; i < d.length; i++) { s += d[i] * d[i]; const v = Math.abs(d[i]); if (v > pk) pk = v; } this.peak = pk; return Math.sqrt(s / d.length); }
   };
+  /* ---------- appli Android : le micro et le retour passent par le moteur natif (Oboe, ~20 ms) ---------- */
+  const NATIVE = (() => { try { return !!(window.LaboNative && window.LaboNative.available()); } catch (e) { return false; } })();
+  if (NATIVE) {
+    const N = window.LaboNative;
+    Object.assign(Mic, {
+      native: true, legacy: false, an: true,
+      async ensure() { if (!N.isOpen() && !N.open()) throw new Error('native'); return true; },
+      start() { this.t0 = AC.currentTime; this.recording = true; N.recStart(); },
+      async stop(keep) {
+        const n = this.recording ? N.recStop() : 0; this.recording = false; const sr = N.sampleRate(); const x = new Float32Array(n);
+        for (let a = 0; a < n; a += sr) { const bin = atob(N.readChunk(a, Math.min(sr, n - a))), m = bin.length >> 1; for (let i = 0; i < m; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; x[a + i] = v / 32768; } }
+        const out = { data: x, t0: this.t0, sr }; if (!keep) this.release(); return out;
+      },
+      monitor(on, vol) { N.setMonitor(!!on, vol == null ? .9 : vol); this.mon = !!on; },
+      release() { try { N.setMonitor(false, 0); N.close(); } catch (e) { } this.mon = false; },
+      level() { this.peak = N.peak(); return N.level(); }
+    });
+  }
+  const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest/download/labo.apk';
+
   /* nettoyage d'une prise : enlève le continu, adoucit les bords, remonte le niveau si c'est trop faible */
   function cleanTake(x, sr) {
     let mean = 0; for (let i = 0; i < x.length; i++) mean += x[i]; mean /= Math.max(1, x.length);
@@ -577,8 +597,8 @@ registerProcessor('labo-cap',Cap);`;
     if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
     player.start(startBar, { countIn, recording: true, quiet: mode === 'click', skip: replace || null });
     const monOn = mode === 'hp' && P.monitor !== false; if (monOn) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
-    const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const lat = Math.round(((AC.baseLatency || 0) + (AC.outputLatency || 0)) * 1000);
-    const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI' + (lat ? ' · retard téléphone ~' + lat + ' ms' : '') + ' (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
+    const rm = $('rpMon'); rm.hidden = mode !== 'hp'; const lat = NATIVE ? Math.round(window.LaboNative.latencyMs()) : Math.round(((AC.baseLatency || 0) + (AC.outputLatency || 0)) * 1000);
+    const upd = () => { rm.textContent = Mic.mon ? '🎧 Je m\'entends : OUI' + (lat ? (NATIVE ? ' · moteur natif ~' : ' · retard téléphone ~') + lat + ' ms' : '') + ' (touche pour couper)' : '🎧 Je m\'entends : NON (touche pour activer)'; rm.classList.toggle('off', !Mic.mon); }; upd();
     rm.onclick = () => { if (Mic.mon) { Mic.monitor(false); P.monitor = false; } else { Mic.monitor(true, P.monVol == null ? .9 : P.monVol); P.monitor = true; } save(); upd(); };
     recState = { type, startBar, countIn, len, replace }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
@@ -1112,7 +1132,8 @@ registerProcessor('labo-cap',Cap);`;
       <div class="reclist">
         <button class="recitem" id="mExp"><span class="ae">💾</span><span><b>Exporter en WAV</b><small>Pour l'envoyer ou l'ouvrir dans ton logiciel</small></span></button>
         <button class="recitem" id="mNew"><span class="ae">✨</span><span><b>Nouvelle maquette</b><small>Repartir d'une page blanche</small></span></button>
-        ${isStandalone() ? '' : '<button class="recitem" id="mInst"><span class="ae">📲</span><span><b>Installer l\'appli sur le téléphone</b><small>Une icône sur ton écran d\'accueil, en plein écran</small></span></button>'}
+        ${NATIVE ? '<div class="recitem"><span class="ae">⚡</span><span><b>Moteur audio natif actif</b><small>Retour dans les écouteurs en basse latence · appli ' + window.LaboNative.version() + '</small></span></div>' : (/Android/.test(navigator.userAgent) ? '<a class="recitem" href="' + APK_URL + '" style="color:inherit;text-decoration:none;background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🤖</span><span><b>Télécharger l\'appli Android</b><small>Pour t\'entendre en direct sans décalage (moteur audio natif)</small></span></a>' : '')}
+        ${isStandalone() || NATIVE ? '' : '<button class="recitem" id="mInst"><span class="ae">📲</span><span><b>Installer l\'appli sur le téléphone</b><small>Une icône sur ton écran d\'accueil, en plein écran</small></span></button>'}
         <div class="recitem"><span class="ae">☀️</span><span style="flex:1"><b>Écran toujours allumé</b><small>${navigator.wakeLock ? 'Le téléphone ne se met pas en veille tant que le Labo est ouvert' : 'Pas disponible sur ce navigateur'}</small></span><span class="sw ${DEV.awake !== false ? 'on' : ''}" id="mAwake"></span></div>
         <div class="recitem"><span class="ae">⚡</span><span style="flex:1"><b>Audio réactif</b><small>Moins de retard pour t'entendre en direct. Si ça grésille, repasse en mode stable.</small></span><span class="sw ${DEV.audioMode === 'fast' ? 'on' : ''}" id="mFast"></span></div>
         <button class="recitem" id="mSync"><span class="ae">⏱️</span><span><b>Synchro écouteurs & micro</b><small>${DEV.lat != null ? 'Retard réglé : ' + Math.round(DEV.lat) + ' ms' : 'Pour jouer avec des écouteurs Bluetooth'}</small></span></button>
@@ -1140,6 +1161,10 @@ registerProcessor('labo-cap',Cap);`;
       const buf = await off.startRendering();
       const wav = DSP.encodeWAV([buf.getChannelData(0), buf.getChannelData(1)], sr);
       const name = (P.name || 'maquette').replace(/[^\w\-àâéèêëîïôûùç ]/gi, '').trim().replace(/\s+/g, '-') + '.wav';
+      if (NATIVE && window.LaboNative.fileBegin(name)) {
+        const u8 = new Uint8Array(wav); for (let i = 0; i < u8.length; i += 0x8000) window.LaboNative.fileAppend(btoa(String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000))));
+        const where = window.LaboNative.fileEnd(); out.innerHTML = `<div class="blk"><p class="sh-p" style="margin-bottom:0">✅ <b>${name}</b> est enregistré dans <b>${where || 'Téléchargements/Labo'}</b>. Tu le retrouves dans l'appli Fichiers de ton téléphone.</p></div>`; return;
+      }
       const blob = new Blob([wav], { type: 'audio/wav' }); const url = URL.createObjectURL(blob);
       out.innerHTML = `<div class="blk"><p class="sh-p" style="margin-bottom:6px">✅ ${name} est prêt (${Math.round(P.bars * bd)} s).</p><audio controls src="${url}" style="width:100%"></audio><a class="btn yel full" href="${url}" download="${name}">⬇️ Télécharger</a>${navigator.canShare ? '<button class="btn full" id="mShare">📤 Partager</button>' : ''}</div>`;
       const sb = out.querySelector('#mShare'); if (sb) sb.onclick = async () => { const f = new File([blob], name, { type: 'audio/wav' }); try { if (navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: P.name }); } catch (e) { } };
@@ -1150,7 +1175,9 @@ registerProcessor('labo-cap',Cap);`;
 
   window.LaboDebug = { Mic, get P() { return P; }, get E() { return E; } };
   /* ---------- démarrage ---------- */
-  $('installBtn').hidden = isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
+  $('installBtn').hidden = NATIVE || isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
+  if (!NATIVE && /Android/.test(navigator.userAgent)) { const a = document.createElement('a'); a.href = APK_URL; a.className = 'btn-inst'; a.style.textDecoration = 'none'; a.textContent = '🤖 Appli Android (son sans décalage)'; $('installBtn').after(a); }
+  if (NATIVE) document.querySelector('.tiny').textContent = '⚡ Moteur audio natif actif · version ' + VERSION;
   $('installBtn').onclick = () => installApp();
   $('openBtn').onclick = async () => {
     const A = window.AudioContext || window.webkitAudioContext;
