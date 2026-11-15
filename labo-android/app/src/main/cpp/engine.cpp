@@ -29,7 +29,7 @@ public:
     static const int FIFO = 1 << 15;
     std::vector<float> fifo = std::vector<float>(FIFO, 0.f);
     int64_t fw = 0, fr = 0;      // positions écriture / lecture (le même fil fait les deux)
-    bool primed = false; int inBurst = 192; float fadeOut = 0.f, lastOut = 0.f;
+    bool primed = false; int inBurst = 192; int extra = 0; int calm = 0; float fadeOut = 0.f, lastOut = 0.f;
     std::vector<float> tmp;
 
     bool open() {
@@ -45,10 +45,11 @@ public:
             ->setUsage(oboe::Usage::Game)
             ->setDataCallback(this)
             ->setErrorCallback(this);
-        if (ob.openStream(out) != oboe::Result::OK) { LOG("sortie impossible"); return false; }
+        ob.setSharingMode(oboe::SharingMode::Exclusive);
+        if (ob.openStream(out) != oboe::Result::OK) { ob.setSharingMode(oboe::SharingMode::Shared); if (ob.openStream(out) != oboe::Result::OK) { LOG("sortie impossible"); return false; } }
         sr = out->getSampleRate(); outCh = out->getChannelCount();
-        out->setBufferSizeInFrames(out->getFramesPerBurst() * 2);
-        tuner.reset(new oboe::LatencyTuner(*out));  // agrandit tout seul le tampon s'il y a la moindre coupure
+        out->setBufferSizeInFrames(out->getFramesPerBurst());   // un seul paquet : le minimum possible
+        tuner.reset(new oboe::LatencyTuner(*out));  // ne l'agrandit que s'il y a vraiment une coupure
 
         oboe::AudioStreamBuilder ib;
         ib.setDirection(oboe::Direction::Input)
@@ -61,13 +62,15 @@ public:
             ->setFormatConversionAllowed(true)
             ->setChannelConversionAllowed(true)
             ->setInputPreset(oboe::InputPreset::VoicePerformance);
+        ib.setSharingMode(oboe::SharingMode::Exclusive);
         oboe::Result r = ib.openStream(in);
+        if (r != oboe::Result::OK) { ib.setSharingMode(oboe::SharingMode::Shared); r = ib.openStream(in); }
         if (r != oboe::Result::OK) { ib.setInputPreset(oboe::InputPreset::Unprocessed); r = ib.openStream(in); }
         if (r != oboe::Result::OK) { ib.setInputPreset(oboe::InputPreset::Generic); r = ib.openStream(in); }
         if (r != oboe::Result::OK) { LOG("micro impossible"); out->close(); out.reset(); return false; }
         inBuf.assign(8192, 0.f); tmp.assign(8192, 0.f);
         inBurst = std::max(64, in->getFramesPerBurst());
-        fw = fr = 0; primed = false; gainNow = 0.f;
+        fw = fr = 0; primed = false; gainNow = 0.f; extra = 0; calm = 0;
         in->requestStart();
         out->requestStart();
         isOpen = true; wanted = true;
@@ -105,13 +108,14 @@ public:
         }
         if (gotTotal > 0) { lvl = std::sqrt(s2 / gotTotal); pk = p; }
 
-        /* 2. réserve visée : un paquet de sortie + un paquet micro (le minimum pour ne jamais manquer) */
-        const int64_t target = numFrames + inBurst;
+        /* 2. réserve visée : juste ce que la sortie demande ; on n'ajoute de la marge que si le micro a déjà été en retard */
+        const int64_t target = numFrames + extra;
         int64_t fill = fw - fr;
         if (fill > FIFO / 2) { fr = fw - target; fill = target; }               // trou énorme (appli en pause) : on se recale
         if (!primed) { if (fill >= target) primed = true; else { fill = 0; } }
         /* trop d'avance accumulée : on rattrape doucement en sautant 1 échantillon sur 64 (inaudible) */
-        int skipEvery = (primed && fill > target + 2 * inBurst + numFrames) ? 64 : 0;
+        int skipEvery = (primed && fill > target + inBurst) ? 48 : 0;   // rattrape vite toute avance en trop
+        if (primed && ++calm > 10000 && extra > 0) { extra -= 8; calm = 0; }  // ~30 s sans souci : on resserre
 
         const float goal = monitor ? vol.load() : 0.f;
         for (int f = 0; f < numFrames; f++) {
@@ -121,6 +125,7 @@ public:
                 x = fifo[fr & (FIFO - 1)]; fr++; fadeOut = 1.f; lastOut = x;
             } else {
                 /* le micro est en retard : on s'éteint en douceur au lieu de claquer, et on se remet en réserve */
+                if (primed) { extra = std::min(extra + 16, 2 * inBurst); calm = 0; }
                 primed = false; fadeOut *= 0.985f; x = lastOut * fadeOut;
             }
             gainNow += (goal - gainNow) * 0.002f;
