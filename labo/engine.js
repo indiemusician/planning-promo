@@ -53,59 +53,63 @@
       this.chains = {}; this.openG = null; this.setKit('rock');
     }
     setKit(k) { this.kit = k; this.drumDrive.curve = curve(k === 'electro' ? 2.8 : 1.4); this.drumRoom.gain.value = k === 'electro' ? .06 : .22; }
-    slot(build) {
-      const ac = this.ac, inp = ac.createGain(), out = ac.createGain(), dry = ac.createGain(), wet = ac.createGain(); wet.gain.value = 0;
-      const fx = build(); inp.connect(dry); dry.connect(out); inp.connect(fx.in); fx.out.connect(wet); wet.connect(out);
-      return { in: inp, out, set: (on) => { const t = ac.currentTime; dry.gain.setTargetAtTime(on ? 0 : 1, t, .02); wet.gain.setTargetAtTime(on ? 1 : 0, t, .02); } };
-    }
+    /* chaîne de piste à la demande : un effet n'existe (et ne consomme) que s'il est allumé */
     chain(track) {
       if (this.chains[track.id]) return this.chains[track.id];
-      const ac = this.ac; const c = {};
-      c.in = ac.createGain();
-      c.radio = this.slot(() => { const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 520; const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; const pk = ac.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1600; pk.gain.value = 6; const sh = ac.createWaveShaper(); sh.curve = curve(4); const g = ac.createGain(); g.gain.value = .6; hp.connect(lp); lp.connect(pk); pk.connect(sh); sh.connect(g); return { in: hp, out: g }; });
-      c.robot = this.slot(() => { const g = ac.createGain(); g.gain.value = 0; const o = ac.createOscillator(); o.frequency.value = 52; o.connect(g.gain); o.start(); const out = ac.createGain(); out.gain.value = 1.5; g.connect(out); return { in: g, out }; });
-      c.lofi = this.slot(() => { const sh = ac.createWaveShaper(); sh.curve = crushCurve(10); const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 180; const g = ac.createGain(); g.gain.value = .85; sh.connect(lp); lp.connect(hp); hp.connect(g); return { in: sh, out: g }; });
-      c.in.connect(c.radio.in); c.radio.out.connect(c.robot.in); c.robot.out.connect(c.lofi.in);
-      c.post = c.lofi.out;
-      c.vol = ac.createGain();
+      const ac = this.ac, c = { fx: {}, key: '' };
+      c.in = ac.createGain(); c.post = ac.createGain(); c.vol = ac.createGain();
       c.pan = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain();
-      c.post.connect(c.vol); c.vol.connect(c.pan); c.pan.connect(this.out);
-      // écho malin
-      c.echoSend = ac.createGain(); c.echoSend.gain.value = 0;
-      c.delay = ac.createDelay(2); const fhp = ac.createBiquadFilter(); fhp.type = 'highpass'; fhp.frequency.value = 380; const flp = ac.createBiquadFilter(); flp.type = 'lowpass'; flp.frequency.value = 3400;
-      c.fb = ac.createGain(); c.echoOut = ac.createGain(); c.echoOut.gain.value = 0;
-      c.post.connect(c.echoSend); c.echoSend.connect(c.delay); c.delay.connect(fhp); fhp.connect(flp); flp.connect(c.fb); c.fb.connect(c.delay); flp.connect(c.echoOut); c.echoOut.connect(c.vol);
-      // doublage
-      c.dbl = ac.createGain(); c.dbl.gain.value = 0; c.post.connect(c.dbl);
-      [[.021, .55, -.75], [.033, .75, .75]].forEach(([dt, rate, p]) => {
-        const dl = ac.createDelay(.1); dl.delayTime.value = dt; const lfo = ac.createOscillator(); lfo.frequency.value = rate; const lg = ac.createGain(); lg.gain.value = .0025; lfo.connect(lg); lg.connect(dl.delayTime); lfo.start();
-        const pn = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain(); if (pn.pan) pn.pan.value = p; const g = ac.createGain(); g.gain.value = .6;
-        c.dbl.connect(dl); dl.connect(g); g.connect(pn); pn.connect(c.vol);
-      });
-      // réverb
-      c.rev = ac.createGain(); c.rev.gain.value = 0; c.post.connect(c.rev); c.rev.connect(this.revIn);
+      c.in.connect(c.post); c.post.connect(c.vol); c.vol.connect(c.pan); c.pan.connect(this.out);
       this.chains[track.id] = c; return c;
     }
+    buildSeries(c, fx) {
+      const ac = this.ac, key = ['radio', 'robot', 'lofi'].filter(k => fx[k]).join(',');
+      if (key === c.key) return; c.key = key;
+      try { c.in.disconnect(); } catch (e) { }
+      (c.series || []).forEach(n => { try { n.disconnect(); if (n.stop) n.stop(); } catch (e) { } }); c.series = [];
+      let node = c.in; const keep = n => { c.series.push(n); return n; };
+      if (fx.radio) { const hp = keep(ac.createBiquadFilter()); hp.type = 'highpass'; hp.frequency.value = 520; const lp = keep(ac.createBiquadFilter()); lp.type = 'lowpass'; lp.frequency.value = 3200; const pk = keep(ac.createBiquadFilter()); pk.type = 'peaking'; pk.frequency.value = 1600; pk.gain.value = 6; const sh = keep(ac.createWaveShaper()); sh.curve = curve(4); const g = keep(ac.createGain()); g.gain.value = .6; node.connect(hp); hp.connect(lp); lp.connect(pk); pk.connect(sh); sh.connect(g); node = g; }
+      if (fx.robot) { const g = keep(ac.createGain()); g.gain.value = 0; const o = keep(ac.createOscillator()); o.frequency.value = 52; o.connect(g.gain); o.start(); const og = keep(ac.createGain()); og.gain.value = 1.5; node.connect(g); g.connect(og); node = og; }
+      if (fx.lofi) { const sh = keep(ac.createWaveShaper()); sh.curve = crushCurve(10); const lp = keep(ac.createBiquadFilter()); lp.type = 'lowpass'; lp.frequency.value = 2600; const hp = keep(ac.createBiquadFilter()); hp.type = 'highpass'; hp.frequency.value = 180; const g = keep(ac.createGain()); g.gain.value = .85; node.connect(sh); sh.connect(lp); lp.connect(hp); hp.connect(g); node = g; }
+      node.connect(c.post);
+    }
+    setSend(c, name, on, build) {
+      if (on && !c.fx[name]) c.fx[name] = build();
+      else if (!on && c.fx[name]) { c.fx[name].forEach(n => { try { n.disconnect(); if (n.stop) n.stop(); } catch (e) { } }); delete c.fx[name]; }
+    }
     applyTrack(track, anySolo, bpm) {
-      const c = this.chain(track), fx = track.fx || {}, t = this.ac.currentTime;
-      c.radio.set(!!fx.radio); c.robot.set(!!fx.robot); c.lofi.set(!!fx.lofi);
-      const e = smartEcho(bpm); c.delay.delayTime.setTargetAtTime(e.time, t, .02); c.fb.gain.value = e.fb;
-      c.echoOut.gain.setTargetAtTime(fx.echo ? .6 : 0, t, .03);
-      c.echoOn = !!fx.echo; if (!fx.echo) { c.echoSend.gain.cancelScheduledValues(t); c.echoSend.gain.setTargetAtTime(0, t, .02); } else if (!c.ducking) c.echoSend.gain.setTargetAtTime(.8, t, .02);
-      c.dbl.gain.setTargetAtTime(fx.double ? 1 : 0, t, .02);
-      c.rev.gain.setTargetAtTime(fx.reverb ? .45 : 0, t, .02);
+      const c = this.chain(track), fx = track.fx || {}, t = this.ac.currentTime, ac = this.ac;
+      this.buildSeries(c, fx);
+      const e = smartEcho(bpm);
+      this.setSend(c, 'echo', !!fx.echo, () => {
+        const send = ac.createGain(); send.gain.value = .8; const dl = ac.createDelay(2); const fhp = ac.createBiquadFilter(); fhp.type = 'highpass'; fhp.frequency.value = 380; const flp = ac.createBiquadFilter(); flp.type = 'lowpass'; flp.frequency.value = 3400; const fb = ac.createGain(); const outg = ac.createGain(); outg.gain.value = .6;
+        c.post.connect(send); send.connect(dl); dl.connect(fhp); fhp.connect(flp); flp.connect(fb); fb.connect(dl); flp.connect(outg); outg.connect(c.vol);
+        c.echoSend = send; c.delay = dl; c.fb = fb; return [send, dl, fhp, flp, fb, outg];
+      });
+      if (c.fx.echo) { c.delay.delayTime.setTargetAtTime(e.time, t, .02); c.fb.gain.value = e.fb; } else c.echoSend = null;
+      c.echoOn = !!fx.echo;
+      this.setSend(c, 'double', !!fx.double, () => {
+        const nodes = [], dbl = ac.createGain(); nodes.push(dbl); c.post.connect(dbl);
+        [[.021, .55, -.75], [.033, .75, .75]].forEach(([dt, rate, p]) => {
+          const dl = ac.createDelay(.1); dl.delayTime.value = dt; const lfo = ac.createOscillator(); lfo.frequency.value = rate; const lg = ac.createGain(); lg.gain.value = .0025; lfo.connect(lg); lg.connect(dl.delayTime); lfo.start();
+          const pn = ac.createStereoPanner ? ac.createStereoPanner() : ac.createGain(); if (pn.pan) pn.pan.value = p; const g = ac.createGain(); g.gain.value = .6;
+          dbl.connect(dl); dl.connect(g); g.connect(pn); pn.connect(c.vol); nodes.push(dl, lfo, lg, pn, g);
+        });
+        return nodes;
+      });
+      this.setSend(c, 'rev', !!fx.reverb, () => { const g = ac.createGain(); g.gain.value = .45; c.post.connect(g); g.connect(this.revIn); return [g]; });
       const audible = !track.mute && (!anySolo || track.solo);
       c.vol.gain.setTargetAtTime(audible ? (track.vol == null ? .9 : track.vol) : 0, t, .02);
       if (c.pan.pan) c.pan.pan.value = track.pan || 0;
       if (track.kind === 'drums') this.drumDrive.connect(c.in);
     }
     duck(track, env, when, off, dur) {
-      const c = this.chain(track); if (!c.echoOn || !env || env.length < 2) return;
+      const c = this.chain(track); if (!c.echoOn || !c.echoSend || !env || env.length < 2) return;
       const rate = 40; const i0 = Math.floor(off * rate), n = Math.max(2, Math.floor(dur * rate));
       const cv = new Float32Array(n); for (let i = 0; i < n; i++) { const v = env[Math.min(env.length - 1, i0 + i)] || 0; cv[i] = .12 + .88 * Math.pow(1 - Math.min(1, v * 1.4), 2); }
       try { c.ducking = true; c.echoSend.gain.cancelScheduledValues(when); c.echoSend.gain.setValueCurveAtTime(cv, when, Math.max(.05, dur - .01)); c.echoSend.gain.setValueAtTime(.8, when + dur); } catch (e) { }
     }
-    resetDucks() { Object.values(this.chains).forEach(c => { c.ducking = false; try { c.echoSend.gain.cancelScheduledValues(0); c.echoSend.gain.value = c.echoOn ? .8 : 0; } catch (e) { } }); }
+    resetDucks() { Object.values(this.chains).forEach(c => { c.ducking = false; if (!c.echoSend) return; try { c.echoSend.gain.cancelScheduledValues(0); c.echoSend.gain.value = .8; } catch (e) { } }); }
 
     /* ---------- batterie ---------- */
     env(g, t, peak, dec, att) { att = att || .001; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(.0002, peak), t + att); g.gain.exponentialRampToValueAtTime(.0001, t + dec); }
