@@ -259,6 +259,7 @@
     bar(p, bar, t, isStart) {
       const bd = this.barDur();
       p.clips.forEach(c => {
+        if (this.opt.skip && c.id === this.opt.skip) return;
         const tr = p.tracks.find(x => x.id === c.trackId); if (!tr) return;
         for (let r = 0; r < (c.loops || 1); r++) {
           const sb = c.bar + r * c.lenBars;

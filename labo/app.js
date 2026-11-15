@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 20;
+  const VERSION = 21;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -142,7 +142,15 @@ registerProcessor('labo-cap',Cap);`;
       if (!keep) this.release();
       return out;
     },
+    /* retour micro : t'entendre dans les écouteurs pendant la prise */
+    monitor(on, vol) {
+      if (this.mon) { try { this.mon.disconnect(); } catch (e) { } this.mon = null; }
+      if (!on || !this.src) return;
+      const g = AC.createGain(); g.gain.value = vol == null ? .9 : vol; const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 60;
+      this.src.connect(hp); hp.connect(g); g.connect(E.master); this.mon = g; this.monHp = hp;
+    },
     release() {
+      this.monitor(false); try { this.monHp && this.monHp.disconnect(); } catch (e) { }
       try { this.src && this.src.disconnect(); this.node && this.node.disconnect(); this.sink && this.sink.disconnect(); } catch (e) { }
       if (this.stream) this.stream.getTracks().forEach(t => t.stop());
       this.stream = null; this.node = null; this.src = null; this.an = null;
@@ -486,7 +494,7 @@ registerProcessor('labo-cap',Cap);`;
   ];
   $('beatBtn').onclick = () => { AC.resume(); openBeatSheet(); };
   $('recBtn').onclick = () => {
-    AC.resume(); const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs', soft: '🔈 batterie douce', click: '🔔 clic' }[P.recMode || 'soft'];
+    AC.resume(); const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs' + (P.monitor !== false ? ' + ta voix/guitare en retour' : ''), soft: '🔈 batterie douce', click: '🔔 clic seul, sans les autres pistes' }[P.recMode || 'soft'];
     const lr = P.lastRec && P.clips.find(c => c.id === P.lastRec.clip) ? P.lastRec : null;
     let h = `<div class="sh-t"><span class="em">🔴</span>On enregistre quoi ?</div><p class="sh-p" style="font-size:12.5px;margin-bottom:10px">Touche et c'est parti, à partir de la mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'} · ${mode}.</p><div class="reclist">`;
     if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
@@ -514,7 +522,9 @@ registerProcessor('labo-cap',Cap);`;
         <button class="recitem" data-m="soft"><span class="ae">🔈</span><span><b>La batterie, doucement, sur le haut-parleur</b><small>Pour jouer en rythme sans écouteurs. Un peu de batterie passera dans ta prise.</small></span></button>
         <button class="recitem" data-m="click"><span class="ae">🔔</span><span><b>Juste le clic</b><small>Sans écouteurs, la prise la plus propre.</small></span></button>
       </div>
-        <div id="rsSync" class="row" style="margin-top:4px"></div></div>
+        <div id="rsSync" class="row" style="margin-top:4px"></div>
+        <div id="rsMon" style="margin-top:6px"><div class="tog"><span>🎙️ M'entendre dans les écouteurs<small>Ta guitare ou ta voix, en direct, mélangée aux autres pistes.${DEV.audioMode !== 'fast' ? ' Avec un petit retard : pour le réduire, passe en « audio réactif » dans le menu ⋯.' : ''}</small></span><span class="sw ${P.monitor !== false ? 'on' : ''}" id="rsMonSw"></span></div>
+          <label class="lbl" style="margin-top:4px">Volume de ton retour</label><input type="range" min="0" max="150" value="${Math.round((P.monVol == null ? .9 : P.monVol) * 100)}" id="rsMonVol"></div></div>
       <div class="blk">${clickChips()}<div class="tog" style="margin-top:6px">Décompte d'une mesure<span class="sw ${countIn ? 'on' : ''}" id="rsCount"></span></div><div class="tog"><span>Métronome pendant la prise<small>Coupe-le si la batterie te suffit</small></span><span class="sw ${P.metroRec ? 'on' : ''}" id="rsMetro"></span></div></div>
       <p class="sh-p" style="font-size:12.5px">Évite les écouteurs Bluetooth : dès que le micro s'ouvre, le téléphone les passe en qualité « appel » et le son se dégrade. Et ferme les autres applis qui enregistrent (dictaphone…).</p>
       <button class="btn red full" id="rsGo" style="font-family:Bungee;font-size:18px">● C'est parti</button>`, b => {
@@ -524,11 +534,13 @@ registerProcessor('labo-cap',Cap);`;
       const hpTxt = () => {
         P.recMode = P.recMode || (P.headphones ? 'hp' : 'soft'); P.headphones = P.recMode === 'hp';
         b.querySelectorAll('[data-m]').forEach(x => { const on = x.dataset.m === P.recMode; x.style.background = on ? 'var(--yellow)' : ''; x.style.color = on ? 'var(--ink)' : ''; x.style.borderColor = on ? 'var(--ink)' : ''; });
-        const sy = b.querySelector('#rsSync'); sy.hidden = !P.headphones;
+        const sy = b.querySelector('#rsSync'); sy.hidden = !P.headphones; b.querySelector('#rsMon').hidden = !P.headphones;
         sy.innerHTML = `<span style="font-size:13px;font-weight:700">⏱️ Synchro écouteurs : ${DEV.lat != null ? '<span style="color:var(--green)">' + Math.round(DEV.lat) + ' ms ✓</span>' : '<span style="color:var(--yellow)">pas encore réglée</span>'}</span><button class="btn yel" id="rsSyncBtn" style="padding:8px 12px;font-size:13px">${DEV.lat != null ? 'Refaire' : 'Régler'}</button>`;
         sy.querySelector('#rsSyncBtn').onclick = () => openSyncSheet(() => openRecSheet(type));
       };
       bindClickChips(b, () => openRecSheet(type));
+      b.querySelector('#rsMonSw').onclick = e => { P.monitor = P.monitor === false; e.target.classList.toggle('on', P.monitor !== false); save(); };
+      b.querySelector('#rsMonVol').oninput = e => { P.monVol = e.target.value / 100; save(); };
       hpTxt(); b.querySelectorAll('[data-m]').forEach(x => x.onclick = () => { P.recMode = x.dataset.m; hpTxt(); save(); });
       b.querySelector('#rsCount').onclick = e => { countIn = !countIn; P.recPrefs.countIn = countIn; save(); e.target.classList.toggle('on', countIn); };
       b.querySelector('#rsMetro').onclick = e => { P.metroRec = !P.metroRec; e.target.classList.toggle('on', P.metroRec); save(); };
@@ -544,7 +556,8 @@ registerProcessor('labo-cap',Cap);`;
     if (len) while (P.bars < startBar + len) { P.bars++; P.drumBars.push('A'); }
     const mode = P.recMode || (P.headphones ? 'hp' : 'soft');
     if (mode === 'soft') E.master.gain.setTargetAtTime(.32, AC.currentTime, .02);
-    player.start(startBar, { countIn, recording: true, quiet: mode === 'click' });
+    player.start(startBar, { countIn, recording: true, quiet: mode === 'click', skip: replace || null });
+    if (mode === 'hp' && P.monitor !== false) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
     recState = { type, startBar, countIn, len, replace }; updatePlayBtn();
     $('recPanel').hidden = false; $('rpTitle').textContent = 'Prépare-toi…';
   }
@@ -1066,10 +1079,12 @@ registerProcessor('labo-cap',Cap);`;
         <button class="recitem" id="mNew"><span class="ae">✨</span><span><b>Nouvelle maquette</b><small>Repartir d'une page blanche</small></span></button>
         ${isStandalone() ? '' : '<button class="recitem" id="mInst"><span class="ae">📲</span><span><b>Installer l\'appli sur le téléphone</b><small>Une icône sur ton écran d\'accueil, en plein écran</small></span></button>'}
         <div class="recitem"><span class="ae">☀️</span><span style="flex:1"><b>Écran toujours allumé</b><small>${navigator.wakeLock ? 'Le téléphone ne se met pas en veille tant que le Labo est ouvert' : 'Pas disponible sur ce navigateur'}</small></span><span class="sw ${DEV.awake !== false ? 'on' : ''}" id="mAwake"></span></div>
+        <div class="recitem"><span class="ae">⚡</span><span style="flex:1"><b>Audio réactif</b><small>Moins de retard pour t'entendre en direct. Si ça grésille, repasse en mode stable.</small></span><span class="sw ${DEV.audioMode === 'fast' ? 'on' : ''}" id="mFast"></span></div>
         <button class="recitem" id="mSync"><span class="ae">⏱️</span><span><b>Synchro écouteurs & micro</b><small>${DEV.lat != null ? 'Retard réglé : ' + Math.round(DEV.lat) + ' ms' : 'Pour jouer avec des écouteurs Bluetooth'}</small></span></button>
         <button class="recitem" id="mHelp"><span class="ae">💡</span><span><b>Comment ça marche</b><small>Le labo en 30 secondes</small></span></button>
       </div><div id="mOut"></div>`, b => {
       b.querySelector('#mSync').onclick = () => openSyncSheet();
+      b.querySelector('#mFast').onclick = e => { DEV.audioMode = DEV.audioMode === 'fast' ? 'stable' : 'fast'; saveDev(); e.target.classList.toggle('on', DEV.audioMode === 'fast'); b.querySelector('#mOut').innerHTML = '<div class="blk sh-p" style="margin-bottom:0">⚡ C\'est noté. <b>Ferme et rouvre le Labo</b> pour que ça prenne effet. Pense à refaire la synchro écouteurs ensuite.</div>'; };
       const mi = b.querySelector('#mInst'); if (mi) mi.onclick = () => installApp(b.querySelector('#mOut'));
       b.querySelector('#mAwake').onclick = e => { DEV.awake = DEV.awake === false; saveDev(); e.target.classList.toggle('on', DEV.awake !== false); keepAwake(DEV.awake !== false); toast(DEV.awake !== false ? '☀️ L\'écran reste allumé' : '🌙 Veille normale'); };
       b.querySelector('#mExp').onclick = () => exportWav(b.querySelector('#mOut'));
@@ -1104,7 +1119,7 @@ registerProcessor('labo-cap',Cap);`;
   $('openBtn').onclick = async () => {
     const A = window.AudioContext || window.webkitAudioContext;
     const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    try { AC = iOS ? new A({ latencyHint: 'interactive', sampleRate: 48000 }) : new A({ latencyHint: 'playback' }); } catch (e) { AC = new A(); } /* grande réserve audio : plus de micro-coupures sur Android */
+    try { AC = iOS ? new A({ latencyHint: 'interactive', sampleRate: 48000 }) : new A({ latencyHint: DEV.audioMode === 'fast' ? 'interactive' : 'playback' }); } catch (e) { AC = new A(); } /* grande réserve audio : plus de micro-coupures sur Android */
     AC.resume();
     AC.onstatechange = () => { if (AC.state === 'interrupted' || AC.state === 'suspended') { if (player && player.playing && !recState) stop(); } };
     $('openBtn').textContent = '…';
