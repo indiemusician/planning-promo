@@ -256,7 +256,22 @@ registerProcessor('labo-cap',Cap);`;
 
   /* ---------- lecture ---------- */
   let wl = null;
-  async function keepAwake(on) { try { if (on && !wl && navigator.wakeLock) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => wl = null); } else if (!on && wl) { wl.release(); wl = null; } } catch (e) { } }
+  async function keepAwake(on) {
+    if (!on && DEV.awake !== false) on = true; // réglage « écran toujours allumé » (activé par défaut)
+    try { if (on && !wl && navigator.wakeLock && !document.hidden) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => wl = null); } else if (!on && wl) { wl.release(); wl = null; } } catch (e) { }
+  }
+  /* installation sur l'écran d'accueil */
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; const ib = $('installBtn'); if (ib) ib.hidden = false; });
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  async function installApp(out) {
+    if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice; installEvt = null; if (r.outcome === 'accepted') { toast('📲 Le Labo est sur ton écran d\'accueil'); return; } }
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+    const msg = ios ? 'Dans Safari : touche <b>Partager</b> (le carré avec la flèche), puis <b>« Sur l\'écran d\'accueil »</b>.' : 'Dans Chrome : touche <b>⋮</b> en haut à droite, puis <b>« Installer l\'application »</b> (ou « Ajouter à l\'écran d\'accueil »).';
+    if (out) out.innerHTML = `<div class="blk sh-p" style="margin-bottom:0">📲 ${msg}<br><br>Ensuite, ouvre le Labo depuis son icône : il s'ouvre en plein écran, comme une vraie appli.</div>`;
+    else openSheet(`<div class="sh-t"><span class="em">📲</span>Installer le Labo</div><p class="sh-p">${msg}</p><p class="sh-p">Ensuite, ouvre-le depuis son icône : il s'ouvre en plein écran, comme une vraie appli.</p><button class="btn full" data-close>OK</button>`);
+  }
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
   function play(from) { if (AC.state !== 'running') AC.resume(); applyTracks(); player.start(from == null ? P.cursor : from, {}); updatePlayBtn(); keepAwake(true); }
   function stop() { player.stop(); updatePlayBtn(); if (!recState) keepAwake(false); }
   function updatePlayBtn() { $('playBtn').classList.toggle('on', player.playing && !player.opt.preview); $('loopBtn').classList.toggle('on', P.loop); }
@@ -778,10 +793,14 @@ registerProcessor('labo-cap',Cap);`;
       <div class="reclist">
         <button class="recitem" id="mExp"><span class="ae">💾</span><span><b>Exporter en WAV</b><small>Pour l'envoyer ou l'ouvrir dans ton logiciel</small></span></button>
         <button class="recitem" id="mNew"><span class="ae">✨</span><span><b>Nouvelle maquette</b><small>Repartir d'une page blanche</small></span></button>
+        ${isStandalone() ? '' : '<button class="recitem" id="mInst"><span class="ae">📲</span><span><b>Installer l\'appli sur le téléphone</b><small>Une icône sur ton écran d\'accueil, en plein écran</small></span></button>'}
+        <div class="recitem"><span class="ae">☀️</span><span style="flex:1"><b>Écran toujours allumé</b><small>${navigator.wakeLock ? 'Le téléphone ne se met pas en veille tant que le Labo est ouvert' : 'Pas disponible sur ce navigateur'}</small></span><span class="sw ${DEV.awake !== false ? 'on' : ''}" id="mAwake"></span></div>
         <button class="recitem" id="mSync"><span class="ae">⏱️</span><span><b>Synchro écouteurs & micro</b><small>${DEV.lat != null ? 'Retard réglé : ' + Math.round(DEV.lat) + ' ms' : 'Pour jouer avec des écouteurs Bluetooth'}</small></span></button>
         <button class="recitem" id="mHelp"><span class="ae">💡</span><span><b>Comment ça marche</b><small>Le labo en 30 secondes</small></span></button>
       </div><div id="mOut"></div>`, b => {
       b.querySelector('#mSync').onclick = () => openSyncSheet();
+      const mi = b.querySelector('#mInst'); if (mi) mi.onclick = () => installApp(b.querySelector('#mOut'));
+      b.querySelector('#mAwake').onclick = e => { DEV.awake = DEV.awake === false; saveDev(); e.target.classList.toggle('on', DEV.awake !== false); keepAwake(DEV.awake !== false); toast(DEV.awake !== false ? '☀️ L\'écran reste allumé' : '🌙 Veille normale'); };
       b.querySelector('#mExp').onclick = () => exportWav(b.querySelector('#mOut'));
       b.querySelector('#mNew').onclick = () => { b.querySelector('#mOut').innerHTML = `<div class="blk"><p class="sh-p">Tout effacer et recommencer ? Ta maquette actuelle sera perdue (pense à l'exporter avant).</p><div class="row"><button class="btn ghost" data-close style="flex:1">Non</button><button class="btn red" id="mYes" style="flex:1">Oui, on repart</button></div></div>`; b.querySelector('[data-close]').onclick = closeSheet; b.querySelector('#mYes').onclick = () => { stop(); hist.length = 0; P = newProject(); for (const k in AUD) delete AUD[k]; DB.clear('audio'); E.chains = {}; rebuildEngine(); closeSheet(); renderAll(); save(); toast('✨ Nouvelle maquette'); }; };
       b.querySelector('#mHelp').onclick = () => { b.querySelector('#mOut').innerHTML = `<div class="blk sh-p" style="margin-bottom:0">1. <b>Atelier batterie</b> : chante ton rythme, le labo trouve le tempo.<br>2. <b>🔴</b> : enregistre ta guitare ou ta voix pendant que la batterie tourne.<br>3. Touche un bloc pour le <b>boucler</b> et l'allonger.<br>4. <b>Chante une basse ou un violon</b> : le labo transforme ta voix en instrument.<br>5. Les <b>idées ✨</b> en haut ajoutent roulements, basse auto, effets… et ↶ annule tout.<br>Ta maquette est gardée sur ce téléphone, même si tu fermes la page.</div>`; };
@@ -809,6 +828,8 @@ registerProcessor('labo-cap',Cap);`;
   function renderAll() { $('projName').value = P.name; renderTimeline(); renderIdeas(); updatePlayBtn(); }
 
   /* ---------- démarrage ---------- */
+  $('installBtn').hidden = isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
+  $('installBtn').onclick = () => installApp();
   $('openBtn').onclick = async () => {
     const A = window.AudioContext || window.webkitAudioContext;
     const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -825,9 +846,9 @@ registerProcessor('labo-cap',Cap);`;
     }
     rebuildEngine();
     P.tracks.forEach(t => { if (t.fx && t.fx.autotune) trackClips(t).forEach(c => c.audioId && tunedBuf(c.audioId)); });
-    $('splash').hidden = true; $('app').hidden = false;
+    $('splash').hidden = true; $('app').hidden = false; keepAwake(true);
     renderAll(); requestAnimationFrame(frame);
     if (saved) toast('🧪 Ta maquette est revenue');
   };
-  document.addEventListener('visibilitychange', () => { if (!AC) return; if (document.hidden) { if (recState) $('rpStop').click(); else if (player && player.playing) stop(); } else if (AC.state !== 'running') AC.resume(); });
+  document.addEventListener('visibilitychange', () => { if (!AC) return; if (document.hidden) { if (recState) $('rpStop').click(); else if (player && player.playing) stop(); } else { if (AC.state !== 'running') AC.resume(); keepAwake(true); } });
 })();
