@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 28;
+  const VERSION = 29;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -522,23 +522,24 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     AC.resume(); if (forceFresh) P.recFresh = true; const pr = P.recPrefs || { len: 0, countIn: true }; const mode = { hp: '🎧 écouteurs' + (P.monitor !== false ? ' + ta voix/guitare en retour' : ''), soft: '🔈 batterie douce', click: '🔔 clic seul, sans les autres pistes' }[P.recMode || 'soft'];
     const lr = P.lastRec && P.clips.find(c => c.id === P.lastRec.clip) ? P.lastRec : null;
     const cur = P.recMode || 'soft';
-    let h = `<div class="sh-t"><span class="em">🔴</span>On enregistre quoi ?</div>
+    let h = `<div class="sh-t"><span class="em">${forceFresh ? '➕' : '🔴'}</span>${forceFresh ? 'Nouvelle piste : quel instrument ?' : 'On enregistre quoi ?'}</div>
       <div class="tabs" id="rcMode" style="margin-bottom:8px"><button data-rm="hp" class="${cur === 'hp' ? 'on' : ''}">🎧 Écouteurs</button><button data-rm="soft" class="${cur === 'soft' ? 'on' : ''}">🔈 Haut-parleur</button><button data-rm="click" class="${cur === 'click' ? 'on' : ''}">🔔 Clic</button></div>
       <p class="sh-p" id="rcTxt" style="font-size:12.5px;margin-bottom:8px"></p>
-      <button class="btn full ${P.recFresh ? 'yel' : 'ghost'}" id="rcFresh" style="margin-bottom:10px;justify-content:flex-start;gap:8px">${P.recFresh ? '➕ Sur une <b>nouvelle piste</b>, par-dessus le reste ✓' : '↪ Sur la piste existante (touche pour une nouvelle piste)'}</button><div class="reclist">`;
+      <div class="tabs" id="rcFresh" style="margin-bottom:6px"><button data-f="0" class="${P.recFresh ? '' : 'on'}">↪ Même piste</button><button data-f="1" class="${P.recFresh ? 'on' : ''}">➕ Nouvelle piste</button></div>
+      <p class="sh-p" style="font-size:13px;margin:0 0 8px;color:var(--yellow);font-weight:700">👇 Touche l'instrument pour lancer la prise</p><div class="reclist">`;
     if (lr) h += `<button class="recitem" data-redo="1" style="background:var(--yellow);color:var(--ink);border-color:var(--ink)"><span class="ae">🔁</span><span><b>Refaire la dernière prise</b><small>${TYPES[lr.type].name} · mesure ${lr.bar + 1} · remplace l'ancienne</small></span></button>`;
     ADDS.filter(a => a[0] !== 'beat').forEach(([k, em, t, s2]) => { h += `<button class="recitem" data-k="${k}"><span class="ae">${em}</span><span><b>${t}</b><small>${s2}</small></span></button>`; });
     h += `</div><button class="btn ghost full" id="recSet">⚙️ Réglages des prises</button>`;
     openSheet(h, b => {
       const txt = () => { const m = P.recMode || 'soft'; b.querySelector('#rcTxt').innerHTML = (m === 'hp' ? 'Tu entends <b>toutes les pistes + toi en direct</b> dans tes écouteurs.' : m === 'soft' ? 'La batterie et les pistes passent <b>doucement sur le haut-parleur</b> (sans te réentendre, sinon larsen).' : 'Tu n\'entends <b>que le clic</b> : la prise la plus propre sans écouteurs.') + ` Départ mesure ${P.cursor + 1} · ${pr.len ? pr.len + ' mesure(s)' : 'durée libre'}.`; };
       txt(); b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { P.recMode = x.dataset.rm; P.headphones = P.recMode === 'hp'; b.querySelectorAll('[data-rm]').forEach(y => y.classList.toggle('on', y === x)); txt(); save(); });
-      const fb = b.querySelector('#rcFresh'); fb.onclick = () => { P.recFresh = !P.recFresh; fb.className = 'btn full ' + (P.recFresh ? 'yel' : 'ghost'); fb.innerHTML = P.recFresh ? '➕ Sur une <b>nouvelle piste</b>, par-dessus le reste ✓' : '↪ Sur la piste existante (touche pour une nouvelle piste)'; save(); };
+      b.querySelectorAll('#rcFresh [data-f]').forEach(x => x.onclick = () => { P.recFresh = x.dataset.f === '1'; b.querySelectorAll('#rcFresh [data-f]').forEach(y => y.classList.toggle('on', y === x)); save(); const l = b.querySelector('.reclist'); l.classList.remove('nudge'); void l.offsetWidth; l.classList.add('nudge'); });
       b.querySelectorAll('[data-k]').forEach(x => x.onclick = () => quickRec(x.dataset.k, null, null, P.recFresh));
       const rd = b.querySelector('[data-redo]'); if (rd) rd.onclick = () => quickRec(lr.type, lr.bar, lr.clip);
       b.querySelector('#recSet').onclick = () => openRecSheet((lr && lr.type) || 'guitare');
     });
   }
-  $('recBtn').onclick = () => openRecMenu(false);
+  $('recBtn').onclick = () => { const l = document.querySelector('#sheetWrap:not([hidden]) .reclist'); if (l) { l.classList.remove('nudge'); void l.offsetWidth; l.classList.add('nudge'); toast('👇 Touche l\'instrument pour lancer la prise'); return; } openRecMenu(false); };
 
   /* ---------- enregistrement ---------- */
   let recState = null;

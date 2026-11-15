@@ -244,3 +244,5 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .addtr .tn{color:var(--yellow)}
 .lane.add{height:52px;background:repeating-linear-gradient(90deg,transparent 0 calc(var(--bw) - 1px),rgba(246,236,214,.06) calc(var(--bw) - 1px) var(--bw));opacity:.6}
 .addtr .newtr .tn{white-space:normal;line-height:1.15;font-size:12px}
+@keyframes nudge{0%,100%{transform:none}25%{transform:translateY(-6px)}55%{transform:translateY(3px)}}
+.reclist.nudge .recitem:not([data-redo]){animation:nudge .5s ease 2;border-color:var(--yellow)}
