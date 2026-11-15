@@ -24,6 +24,8 @@ class MainActivity : Activity() {
         volumeControlStream = AudioManager.STREAM_MUSIC
         web = WebView(this)
         setContentView(web)
+        web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+        web.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true

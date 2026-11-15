@@ -7,6 +7,8 @@
 #include <cmath>
 #include <mutex>
 #include <algorithm>
+#include <thread>
+#include <oboe/LatencyTuner.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_INFO, "LaboAudio", __VA_ARGS__)
 
@@ -21,6 +23,14 @@ public:
     int outCh = 2, sr = 48000;
     float gainNow = 0.f;
     std::mutex lock;
+    std::atomic<bool> wanted{false};
+    std::unique_ptr<oboe::LatencyTuner> tuner;
+    /* file d'attente entre le micro et les écouteurs : rien n'est jamais jeté ni sauté */
+    static const int FIFO = 1 << 15;
+    std::vector<float> fifo = std::vector<float>(FIFO, 0.f);
+    int64_t fw = 0, fr = 0;      // positions écriture / lecture (le même fil fait les deux)
+    bool primed = false; int inBurst = 192; float fadeOut = 0.f, lastOut = 0.f;
+    std::vector<float> tmp;
 
     bool open() {
         std::lock_guard<std::mutex> g(lock);
@@ -29,7 +39,7 @@ public:
         oboe::AudioStreamBuilder ob;
         ob.setDirection(oboe::Direction::Output)
             ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-            ->setSharingMode(oboe::SharingMode::Exclusive)
+            ->setSharingMode(oboe::SharingMode::Shared)
             ->setFormat(oboe::AudioFormat::Float)
             ->setChannelCount(2)
             ->setUsage(oboe::Usage::Game)
@@ -38,11 +48,12 @@ public:
         if (ob.openStream(out) != oboe::Result::OK) { LOG("sortie impossible"); return false; }
         sr = out->getSampleRate(); outCh = out->getChannelCount();
         out->setBufferSizeInFrames(out->getFramesPerBurst() * 2);
+        tuner.reset(new oboe::LatencyTuner(*out));  // agrandit tout seul le tampon s'il y a la moindre coupure
 
         oboe::AudioStreamBuilder ib;
         ib.setDirection(oboe::Direction::Input)
             ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-            ->setSharingMode(oboe::SharingMode::Exclusive)
+            ->setSharingMode(oboe::SharingMode::Shared)
             ->setFormat(oboe::AudioFormat::Float)
             ->setChannelCount(1)
             ->setSampleRate(sr)
@@ -54,17 +65,19 @@ public:
         if (r != oboe::Result::OK) { ib.setInputPreset(oboe::InputPreset::Unprocessed); r = ib.openStream(in); }
         if (r != oboe::Result::OK) { ib.setInputPreset(oboe::InputPreset::Generic); r = ib.openStream(in); }
         if (r != oboe::Result::OK) { LOG("micro impossible"); out->close(); out.reset(); return false; }
-        inBuf.assign(sr, 0.f);
+        inBuf.assign(8192, 0.f); tmp.assign(8192, 0.f);
+        inBurst = std::max(64, in->getFramesPerBurst());
+        fw = fr = 0; primed = false; gainNow = 0.f;
         in->requestStart();
         out->requestStart();
-        isOpen = true;
+        isOpen = true; wanted = true;
         LOG("ouvert : %d Hz, burst %d", sr, out->getFramesPerBurst());
         return true;
     }
 
     void close() {
         std::lock_guard<std::mutex> g(lock);
-        recording = false; monitor = false;
+        recording = false; monitor = false; wanted = false;
         if (out) { out->stop(); out->close(); out.reset(); }
         if (in) { in->stop(); in->close(); in.reset(); }
         isOpen = false;
@@ -72,28 +85,45 @@ public:
 
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *os, void *audioData, int32_t numFrames) override {
         float *o = static_cast<float *>(audioData);
-        int got = 0;
+        if (tuner) tuner->tune();
+        /* 1. on vide tout ce que le micro a déjà donné, sans attendre */
+        int gotTotal = 0; float s2 = 0, p = 0;
         if (in) {
-            int avail = 0; auto a = in->getAvailableFrames(); if (a) avail = a.value();
-            int want = std::min((int) inBuf.size(), std::max(numFrames, avail));
-            auto rr = in->read(inBuf.data(), want, 0);
-            if (rr) got = rr.value();
+            for (int guard = 0; guard < 8; guard++) {
+                auto rr = in->read(inBuf.data(), (int) inBuf.size(), 0);
+                if (!rr || rr.value() <= 0) break;
+                int got = rr.value(); gotTotal += got;
+                if (recording) {
+                    int n = recN.load(), k = std::min(got, (int) rec.size() - n);
+                    for (int i = 0; i < k; i++) { float x = std::max(-1.f, std::min(1.f, inBuf[i])); rec[n + i] = (int16_t) lrintf(x * 32767.f); }
+                    recN.store(n + k);
+                }
+                for (int i = 0; i < got; i++) { float x = inBuf[i]; s2 += x * x; p = std::max(p, std::fabs(x)); fifo[(fw + i) & (FIFO - 1)] = x; }
+                fw += got;
+                if (got < (int) inBuf.size()) break;
+            }
         }
-        if (recording && got > 0) {
-            int n = recN.load(), k = std::min(got, (int) rec.size() - n);
-            for (int i = 0; i < k; i++) { float x = std::max(-1.f, std::min(1.f, inBuf[i])); rec[n + i] = (int16_t) (x * 32767.f); }
-            recN.store(n + k);
-        }
-        if (got > 0) {
-            float s = 0, p = 0;
-            for (int i = 0; i < got; i++) { float x = inBuf[i]; s += x * x; p = std::max(p, std::fabs(x)); }
-            lvl = std::sqrt(s / got); pk = p;
-        }
-        const float target = monitor ? vol.load() : 0.f;
+        if (gotTotal > 0) { lvl = std::sqrt(s2 / gotTotal); pk = p; }
+
+        /* 2. réserve visée : un paquet de sortie + un paquet micro (le minimum pour ne jamais manquer) */
+        const int64_t target = numFrames + inBurst;
+        int64_t fill = fw - fr;
+        if (fill > FIFO / 2) { fr = fw - target; fill = target; }               // trou énorme (appli en pause) : on se recale
+        if (!primed) { if (fill >= target) primed = true; else { fill = 0; } }
+        /* trop d'avance accumulée : on rattrape doucement en sautant 1 échantillon sur 64 (inaudible) */
+        int skipEvery = (primed && fill > target + 2 * inBurst + numFrames) ? 64 : 0;
+
+        const float goal = monitor ? vol.load() : 0.f;
         for (int f = 0; f < numFrames; f++) {
-            int idx = got - numFrames + f;
-            float x = (idx >= 0 && idx < got) ? inBuf[idx] : 0.f;
-            gainNow += (target - gainNow) * 0.003f;
+            float x;
+            if (primed && fw - fr > 0) {
+                if (skipEvery && (f % skipEvery) == 0 && fw - fr > 1) fr++;
+                x = fifo[fr & (FIFO - 1)]; fr++; fadeOut = 1.f; lastOut = x;
+            } else {
+                /* le micro est en retard : on s'éteint en douceur au lieu de claquer, et on se remet en réserve */
+                primed = false; fadeOut *= 0.985f; x = lastOut * fadeOut;
+            }
+            gainNow += (goal - gainNow) * 0.002f;
             float v = x * gainNow;
             for (int c = 0; c < outCh; c++) o[f * outCh + c] = v;
         }
@@ -101,8 +131,14 @@ public:
     }
 
     void onErrorAfterClose(oboe::AudioStream *, oboe::Result err) override {
-        LOG("flux fermé (%s), on rouvrira à la prochaine prise", oboe::convertToText(err));
-        isOpen = false; out.reset(); in.reset();
+        LOG("flux fermé (%s), réouverture", oboe::convertToText(err));
+        bool again = wanted.load(), mon = monitor.load(), recg = recording.load();
+        std::thread([this, again, mon, recg] {
+            { std::lock_guard<std::mutex> g(lock);
+              if (out) { out->close(); out.reset(); } if (in) { in->stop(); in->close(); in.reset(); }
+              isOpen = false; tuner.reset(); }
+            if (again && open()) { monitor = mon; recording = recg; }
+        }).detach();
     }
 
     double latency() {

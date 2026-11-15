@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 26;
+  const VERSION = 27;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -175,7 +175,8 @@ registerProcessor('labo-cap',Cap);`;
       level() { this.peak = N.peak(); return N.level(); }
     });
   }
-  const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest/download/labo.apk';
+  if (NATIVE) window.LABO_LOOK = .4; /* programmation plus en avance : la lecture ne saute plus si l'écran travaille */
+const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest/download/labo.apk';
 
   /* nettoyage d'une prise : enlève le continu, adoucit les bords, remonte le niveau si c'est trop faible */
   function cleanTake(x, sr) {
@@ -577,6 +578,7 @@ registerProcessor('labo-cap',Cap);`;
   /* bascule du moteur audio : ultra-réactif pendant les prises avec retour, stable pour la lecture */
   let acMode = null;
   function setLatency(mode) {
+    if (NATIVE && mode === 'fast') mode = 'stable'; /* avec le moteur natif, le retour se fait ailleurs : la lecture reste en mode stable, sans à-coups */
     if (!AC || acMode === mode) return; const A = window.AudioContext || window.webkitAudioContext;
     if (player) player.stop(); Mic.release();
     const old = AC; let n; try { n = new A(mode === 'fast' ? { latencyHint: 0, sampleRate: 48000 } : { latencyHint: 'playback' }); } catch (e) { try { n = new A({ latencyHint: mode === 'fast' ? 'interactive' : 'playback' }); } catch (e2) { return; } }
@@ -584,7 +586,7 @@ registerProcessor('labo-cap',Cap);`;
     for (const k in AUD) { AUD[k].buf = AUD[k].buf || null; }
     setTimeout(() => { try { old.close(); } catch (e) { } }, 300);
   }
-  const wantsFast = () => (P.recMode === 'hp' && P.monitor !== false) || DEV.audioMode === 'fast';
+  const wantsFast = () => !NATIVE && (P.recMode === 'hp' && P.monitor !== false) || DEV.audioMode === 'fast';
   async function quickRec(type, startBar, replace) {
     if (wantsFast()) setLatency('fast');
     AC.resume(); if (!(await needMic())) return; closeSheet();
@@ -619,7 +621,7 @@ registerProcessor('labo-cap',Cap);`;
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
-    const lat = ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006));
+    const lat = NATIVE ? (DEV.latNative != null ? DEV.latNative / 1000 : (AC.outputLatency || .04) + (AC.baseLatency || .01) + window.LaboNative.latencyMs() / 2000) : ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006));
     /* on garde 0,5 s de marge avant le premier temps : rien n'est jamais mangé, le calage se fait sans couper */
     const isAudio = TYPES[st.type].kind === 'audio', PRE = isAudio ? 1 : 0;
     let s0 = Math.round((songStart - rec.t0 + lat - PRE) * sr);
@@ -681,7 +683,7 @@ registerProcessor('labo-cap',Cap);`;
       <div id="syOut"></div>
       ${back ? '<button class="btn full" id="syBack">← Retour à l\'enregistrement</button>' : '<button class="btn full" data-close>OK</button>'}`, b => {
       const out = b.querySelector('#syOut');
-      const done = (ms, how) => { DEV.lat = ms; DEV.latHow = how; saveDev(); out.innerHTML = `<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ Retard mesuré : ${Math.round(ms)} ms</b><br><span style="font-size:13px">Tes prises seront recalées automatiquement.${how === 'boucle' ? ' C\'est aussi à peu près le retard de ton retour dans les écouteurs' + (ms < 30 ? ' : imperceptible 👌' : ms < 60 ? ' : léger, ça se joue bien.' : ' : il se sent, coupe le retour pour la guitare.') : ''}</span></div>`; };
+      const done = (ms, how) => { DEV.lat = ms; DEV.latHow = how; if (NATIVE) DEV.latNative = ms; saveDev(); out.innerHTML = `<div class="blk" style="background:var(--green);color:var(--ink);border-color:var(--ink)"><b>✓ Retard mesuré : ${Math.round(ms)} ms</b><br><span style="font-size:13px">Tes prises seront recalées automatiquement.${how === 'boucle' ? ' C\'est aussi à peu près le retard de ton retour dans les écouteurs' + (ms < 30 ? ' : imperceptible 👌' : ms < 60 ? ' : léger, ça se joue bien.' : ' : il se sent, coupe le retour pour la guitare.') : ''}</span></div>`; };
       const fail = msg => { out.innerHTML = `<div class="blk"><b>😕 ${msg}</b></div>`; };
       if (back) b.querySelector('#syBack').onclick = back;
       b.querySelector('#syMicBtn').onclick = async () => {
@@ -1182,7 +1184,7 @@ registerProcessor('labo-cap',Cap);`;
   $('openBtn').onclick = async () => {
     const A = window.AudioContext || window.webkitAudioContext;
     const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    try { AC = iOS ? new A({ latencyHint: 'interactive', sampleRate: 48000 }) : new A({ latencyHint: DEV.audioMode === 'fast' ? 'interactive' : 'playback' }); } catch (e) { AC = new A(); } /* grande réserve audio : plus de micro-coupures sur Android */
+    try { AC = iOS ? new A({ latencyHint: 'interactive', sampleRate: 48000 }) : new A({ latencyHint: (!NATIVE && DEV.audioMode === 'fast') ? 'interactive' : 'playback' }); } catch (e) { AC = new A(); } /* grande réserve audio : plus de micro-coupures sur Android */
     AC.resume();
     acMode = DEV.audioMode === 'fast' ? 'fast' : 'stable';
     AC.onstatechange = () => { if (AC.state === 'interrupted' || AC.state === 'suspended') { if (player && player.playing && !recState) stop(); } };

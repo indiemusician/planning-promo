@@ -214,7 +214,7 @@
     }
     tick() {
       if (!this.playing) return; const ac = this.E.ac, p = this.get();
-      while (!this.endAt && this.nextTime < ac.currentTime + .15) {
+      while (!this.endAt && this.nextTime < ac.currentTime + (window.LABO_LOOK || .15)) {
         this.schedule(p, this.step, this.nextTime); this.vis.push({ step: this.step, t: this.nextTime });
         this.nextTime += this.stepDur(); this.step++;
         if (this.opt.preview) continue;
@@ -229,7 +229,7 @@
         const toBar = 16 - (this.step % 16), bt = this.nextTime + toBar * this.stepDur(); let b = (this.step + toBar) / 16;
         if (b >= p.bars) b = (p.loop && !this.opt.recording) ? (p.loopFrom || 0) : -1;
         const key = Math.round(bt * 100);
-        if (b >= 0 && bt - .6 < ac.currentTime + .15 && !this.early.has(key)) { this.early.add(key); this.bar(p, b, bt, false); }
+        if (b >= 0 && bt - .6 < ac.currentTime + (window.LABO_LOOK || .15) && !this.early.has(key)) { this.early.add(key); this.bar(p, b, bt, false); }
       }
       if (this.endAt && ac.currentTime > this.endAt + .2) { this.stop(); if (this.h.onEnd) this.h.onEnd(); }
     }
