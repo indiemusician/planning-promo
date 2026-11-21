@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 31;
+  const VERSION = 32;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -618,13 +618,19 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     if (mode === 'hp' && P.monitor !== false) Mic.monitor(true, P.monVol == null ? .9 : P.monVol);
     practice = { from, countIn: pr.countIn !== false, mode };
     $('recPanel').hidden = false; $('recPanel').classList.add('practice');
-    $('rpCancel').textContent = 'Arrêter'; $('rpStop').textContent = '● Enregistrer';
-    monBtn(mode); updatePlayBtn();
+    $('rpCancel').textContent = 'Arrêter';
+    if (!TYPES[P.practiceType]) P.practiceType = (P.lastRec && TYPES[P.lastRec.type] && P.lastRec.type !== 'beat') ? P.lastRec.type : 'guitare';
+    let row = $('rpInst'); if (!row) { row = document.createElement('div'); row.id = 'rpInst'; $('rpMon').before(row); }
+    row.hidden = false;
+    row.innerHTML = '<span>La prise sera :</span>' + ADDS.filter(a => a[0] !== 'beat').map(([k, em, t]) => `<button data-pk="${k}" class="${k === P.practiceType ? 'on' : ''}" aria-label="${t}">${em}</button>`).join('');
+    const lbl = () => { $('rpStop').textContent = '● Enregistrer · ' + TYPES[P.practiceType].name; };
+    row.querySelectorAll('[data-pk]').forEach(x => x.onclick = () => { P.practiceType = x.dataset.pk; row.querySelectorAll('[data-pk]').forEach(y => y.classList.toggle('on', y === x)); lbl(); save(); });
+    lbl(); monBtn(mode); updatePlayBtn();
   }
   function endPractice(keepMic) {
     if (!practice) return; practice = null; player.stop(); restoreVol();
     Mic.monitor(false); if (!keepMic) Mic.release(); keepAwake(false);
-    $('recPanel').hidden = true; $('recPanel').classList.remove('practice');
+    $('recPanel').hidden = true; $('recPanel').classList.remove('practice'); if ($('rpInst')) $('rpInst').hidden = true;
     $('rpCancel').textContent = 'Annuler'; $('rpStop').textContent = '■ Stop'; updatePlayBtn();
   }
   function practiceFrame() {
@@ -664,7 +670,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
   const restoreVol = () => E.master.gain.setTargetAtTime(.9, AC.currentTime, .05);
   $('rpCancel').onclick = () => { if (practice) { endPractice(false); toast('🎯 Entraînement terminé'); return; } if (!recState) return; player.stop(); restoreVol(); Mic.stop(); keepAwake(false); recState = null; $('recPanel').hidden = true; updatePlayBtn(); renderTimeline(); toast('Prise annulée'); };
   $('rpStop').onclick = async () => {
-    if (practice) { endPractice(true); openRecMenu(false); return; }
+    if (practice) { const from = practice.from, k = P.practiceType || 'guitare'; endPractice(true); quickRec(k, from, null, P.recFresh); return; }
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
@@ -1222,6 +1228,9 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
 
   function renderAll() { $('projName').value = P.name; renderTimeline(); renderIdeas(); updatePlayBtn(); }
 
+  const bugToast = m => { try { toast('⚠️ Petit bug : ' + String(m).slice(0, 90)); } catch (e) { } };
+  window.addEventListener('error', e => bugToast(e.message));
+  window.addEventListener('unhandledrejection', e => bugToast(e.reason && (e.reason.message || e.reason)));
   window.LaboDebug = { Mic, get P() { return P; }, get E() { return E; }, get player() { return player; } };
   /* ---------- démarrage ---------- */
   $('installBtn').hidden = NATIVE || isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
