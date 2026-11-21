@@ -152,6 +152,24 @@
       const ac = this.ac, g = ac.createGain(), hp = ac.createBiquadFilter(), pk = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4200; pk.type = 'peaking'; pk.frequency.value = 6500; pk.Q.value = .8; pk.gain.value = 5;
       this.nz(t, 1.5).connect(hp); hp.connect(pk); pk.connect(g); g.connect(this.drumIn); this.env(g, t, .3 * v, 1.5, .003);
     }
+    /* voix de décompte : la tienne (LABO_CUSTOM) ou le robot FR/EN (LABO_COUNTS) → 4 sons prêts à jouer */
+    countBufs(mode) {
+      try {
+        this._cb = this._cb || {};
+        const src = mode === 'perso' ? root.LABO_CUSTOM : (root.LABO_COUNTS && root.LABO_COUNTS[mode]);
+        if (!src) return null;
+        const c = this._cb[mode]; if (c && c.src === src) return c.bufs;
+        const ac = this.ac, parts = mode === 'perso' ? src.parts : src.pcm;
+        if (!parts || parts.length < 4) return null;
+        const bufs = parts.slice(0, 4).map(p => {
+          let f;
+          if (typeof p === 'string') { const bin = atob(p), n = bin.length >> 1; f = new Float32Array(n); for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; f[i] = v / 32768; } }
+          else f = p instanceof Float32Array ? p : Float32Array.from(p);
+          const b = ac.createBuffer(1, Math.max(1, f.length), src.sr || ac.sampleRate); b.copyToChannel(f, 0); return b;
+        });
+        this._cb[mode] = { src, bufs }; return bufs;
+      } catch (e) { return null; }
+    }
     click(t, accent, vol, n) {
       const bufs = this.clickMode && this.clickMode !== 'clic' ? this.countBufs(this.clickMode) : null;
       if (bufs) { const s = this.ac.createBufferSource(); s.buffer = bufs[((n || 0) % 4 + 4) % 4]; const g = this.ac.createGain(); g.gain.value = (vol == null ? 1 : vol) * (accent ? 1 : .8); s.connect(g); g.connect(this.out); s.start(Math.max(t, this.ac.currentTime)); return; }

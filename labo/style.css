@@ -261,3 +261,65 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 #rpInst button{width:40px;height:40px;border-radius:12px;font-size:20px;background:rgba(7,10,31,.12);border:2px solid transparent}
 #rpInst button.on{background:var(--cream);border-color:var(--ink);box-shadow:2px 2px 0 var(--ink)}
 #recPanel.practice #rpStop{font-size:14px}
+/* ---------- coach rythme ---------- */
+.btn-big.metro-home{margin-top:12px;background:var(--cyan);color:var(--ink)}
+#metro{position:fixed;inset:0;z-index:25;background:var(--navy);display:flex;flex-direction:column;color:var(--cream)}
+#metro[hidden]{display:none}
+.mt-top{display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 16px 8px}
+.mt-logo{font-family:'Bungee';font-size:19px;color:var(--yellow)}
+.mt-x{width:44px;height:44px;border-radius:14px;border:2.5px solid var(--cream);font-size:18px;color:var(--cream)}
+.mt-scroll{flex:1;overflow-y:auto;padding:4px 16px calc(24px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.mt-bpm{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:4px}
+.mt-pm{width:62px;height:62px;border-radius:50%;background:var(--cream);color:var(--ink);font-size:34px;font-weight:700;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
+.mt-pm:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.mt-num{text-align:center;min-width:150px}
+.mt-num b{display:block;font-family:'Bungee';font-size:76px;line-height:1;color:var(--cream);text-shadow:4px 4px 0 var(--ink)}
+.mt-num span{font-family:'Bungee';font-size:14px;color:var(--yellow);letter-spacing:2px}
+#mtRange,#mtVol{width:100%;accent-color:var(--yellow);margin:12px 0 4px;height:28px}
+.mt-row2{display:flex;gap:8px;align-items:center;justify-content:center}
+.mt-tap{flex:1;padding:12px;border-radius:14px;background:var(--navy3);border:2.5px dashed var(--yellow);color:var(--yellow);font-weight:700;font-size:15px}
+.mt-tap.hit{animation:tap .18s ease}
+@keyframes tap{50%{transform:scale(.95);background:var(--yellow);color:var(--ink)}}
+.mt-beats{display:flex;gap:10px;justify-content:center;margin:20px 0 8px}
+.mt-beat{flex:1;max-width:64px;aspect-ratio:1;border-radius:50%;border:3px solid rgba(246,236,214,.3);display:grid;place-items:center;position:relative;transition:transform .08s,background .08s}
+.mt-beat i{font-style:normal;font-family:'Bungee';font-size:20px;opacity:.5}
+.mt-beat.acc{border-color:var(--yellow)}
+.mt-beat.lit{background:var(--cyan);border-color:var(--ink);transform:scale(1.12);box-shadow:0 0 0 4px rgba(60,220,240,.25)}
+.mt-beat.acc.lit{background:var(--yellow)}
+.mt-beat.lit i{opacity:1;color:var(--ink)}
+.mt-beat.ghost{border-style:dashed;border-color:rgba(246,236,214,.5)}
+.mt-subs{position:absolute;bottom:-12px;left:0;right:0;display:flex;justify-content:center;gap:4px}
+.mt-subs s{width:7px;height:7px;border-radius:50%;background:rgba(246,236,214,.25)}
+.mt-subs s.lit{background:var(--cyan)}
+.mt-status{text-align:center;font-weight:700;font-size:14px;min-height:22px;margin:16px 0 10px;opacity:.85}
+.mt-status.ghost{color:var(--yellow);opacity:1}
+.mt-go{display:block;width:100%;padding:16px;border-radius:18px;background:var(--yellow);color:var(--ink);font-family:'Bungee';font-size:22px;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
+.mt-go.on{background:var(--red);color:var(--cream)}
+.mt-go:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+.mt-card,.mt-coach{margin-top:14px;padding:14px;border-radius:18px;background:var(--navy3);border:2.5px solid rgba(246,236,214,.25)}
+.mt-card label{display:block;font-family:'Bungee';font-size:13px;color:var(--yellow);margin:4px 0 8px}
+.mt-card label+.chips+label{margin-top:12px}
+.mt-hint{font-size:12.5px;opacity:.8;margin:0 0 8px;line-height:1.35}
+.mt-vol{display:flex;align-items:center;gap:8px}
+.mt-ramp{margin-top:10px;font-size:14px;font-weight:600;line-height:2.2}
+.mt-ramp.dim{opacity:.4;pointer-events:none}
+.mt-ramp select{background:var(--cream);color:var(--ink);border-radius:8px;border:2px solid var(--ink);padding:3px 6px;font-weight:700;font-size:14px}
+.mt-coach{border-color:var(--cyan)}
+.mt-coach.off .mt-scale,.mt-coach.off .mt-verdict,.mt-coach.off .mt-stats{display:none}
+.mt-ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.mt-ch b{font-family:'Bungee';font-size:15px;color:var(--cyan)}
+.tog{padding:7px 12px;border-radius:12px;border:2px solid var(--cream);font-weight:700;font-size:13px;color:var(--cream)}
+.tog.on{background:var(--cyan);color:var(--ink);border-color:var(--ink)}
+.mt-scale{position:relative;height:46px;margin:10px 0 6px;border-radius:12px;background:linear-gradient(90deg,rgba(255,90,90,.35),rgba(255,210,60,.3) 32%,rgba(80,230,140,.45) 44%,rgba(80,230,140,.45) 56%,rgba(255,210,60,.3) 68%,rgba(255,90,90,.35))}
+.mt-scale span{position:absolute;bottom:3px;font-size:10.5px;font-weight:700;opacity:.7}
+.mt-scale .l{left:8px}.mt-scale .r{right:8px}
+.mt-scale .c{left:50%;top:0;bottom:0;width:2px;background:var(--cream);transform:translateX(-1px);opacity:1}
+#mtDots{position:absolute;inset:0}
+#mtDots i{position:absolute;top:12px;width:16px;height:16px;margin-left:-8px;border-radius:50%;border:2px solid var(--ink);transition:opacity .3s}
+#mtDots i.ok{background:#50e68c}#mtDots i.mid{background:var(--yellow)}#mtDots i.bad{background:var(--red)}
+.mt-verdict{text-align:center;font-family:'Bungee';font-size:20px;margin:6px 0 10px}
+.mt-verdict.ok{color:#50e68c}.mt-verdict.mid{color:var(--yellow)}.mt-verdict.bad{color:var(--red)}
+.mt-stats{display:flex;gap:8px}
+.mt-stats div{flex:1;text-align:center;background:rgba(7,10,31,.4);border-radius:12px;padding:8px 4px}
+.mt-stats b{display:block;font-size:16px}
+.mt-stats span{font-size:11px;opacity:.75}

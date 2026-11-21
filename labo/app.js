@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 32;
+  const VERSION = 33;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -674,7 +674,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
     if (!recState) return; const st = recState; recState = null; $('recPanel').hidden = true;
     const songStart = player.songStart; player.stop(); restoreVol(); updatePlayBtn(); keepAwake(false);
     const rec = await Mic.stop(); const sr = rec.sr;
-    const lat = NATIVE ? (DEV.latNative != null ? DEV.latNative / 1000 : (AC.outputLatency || .04) + (AC.baseLatency || .01) + window.LaboNative.latencyMs() / 2000) : ((P.recMode === 'hp' && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006));
+    const lat = micLat(P.recMode === 'hp');
     /* on garde 0,5 s de marge avant le premier temps : rien n'est jamais mangé, le calage se fait sans couper */
     const isAudio = TYPES[st.type].kind === 'audio', PRE = isAudio ? 1 : 0;
     let s0 = Math.round((songStart - rec.t0 + lat - PRE) * sr);
@@ -1191,10 +1191,12 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
         ${isStandalone() || NATIVE ? '' : '<button class="recitem" id="mInst"><span class="ae">📲</span><span><b>Installer l\'appli sur le téléphone</b><small>Une icône sur ton écran d\'accueil, en plein écran</small></span></button>'}
         <div class="recitem"><span class="ae">☀️</span><span style="flex:1"><b>Écran toujours allumé</b><small>${navigator.wakeLock ? 'Le téléphone ne se met pas en veille tant que le Labo est ouvert' : 'Pas disponible sur ce navigateur'}</small></span><span class="sw ${DEV.awake !== false ? 'on' : ''}" id="mAwake"></span></div>
         <div class="recitem"><span class="ae">⚡</span><span style="flex:1"><b>Audio réactif</b><small>Moins de retard pour t'entendre en direct. Si ça grésille, repasse en mode stable.</small></span><span class="sw ${DEV.audioMode === 'fast' ? 'on' : ''}" id="mFast"></span></div>
+        <button class="recitem" id="mMetro"><span class="ae">⏱️</span><span><b>Coach rythme</b><small>Métronome, ta voix qui compte, exercices de tempo</small></span></button>
         <button class="recitem" id="mSync"><span class="ae">⏱️</span><span><b>Synchro écouteurs & micro</b><small>${DEV.lat != null ? 'Retard réglé : ' + Math.round(DEV.lat) + ' ms' : 'Pour jouer avec des écouteurs Bluetooth'}</small></span></button>
         <button class="recitem" id="mHelp"><span class="ae">💡</span><span><b>Comment ça marche</b><small>Le labo en 30 secondes</small></span></button>
       </div><div id="mOut"></div>`, b => {
       b.querySelector('#mSync').onclick = () => openSyncSheet();
+      b.querySelector('#mMetro').onclick = () => { closeSheet(); Metro.open(); };
       b.querySelector('#mFast').onclick = e => { DEV.audioMode = DEV.audioMode === 'fast' ? 'stable' : 'fast'; saveDev(); e.target.classList.toggle('on', DEV.audioMode === 'fast'); b.querySelector('#mOut').innerHTML = '<div class="blk sh-p" style="margin-bottom:0">⚡ C\'est noté. <b>Ferme et rouvre le Labo</b> pour que ça prenne effet. Pense à refaire la synchro écouteurs ensuite.</div>'; };
       const mi = b.querySelector('#mInst'); if (mi) mi.onclick = () => installApp(b.querySelector('#mOut'));
       b.querySelector('#mAwake').onclick = e => { DEV.awake = DEV.awake === false; saveDev(); e.target.classList.toggle('on', DEV.awake !== false); keepAwake(DEV.awake !== false); toast(DEV.awake !== false ? '☀️ L\'écran reste allumé' : '🌙 Veille normale'); };
@@ -1228,15 +1230,245 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
 
   function renderAll() { $('projName').value = P.name; renderTimeline(); renderIdeas(); updatePlayBtn(); }
 
+  /* =====================================================================
+     ⏱️ COACH RYTHME : métronome à part (clic ou ta voix), BPM, exercices,
+     et « Écoute-moi » qui mesure si tu joues en avance ou en retard
+     ===================================================================== */
+  const micLat = hp => NATIVE ? (DEV.latNative != null ? DEV.latNative / 1000 : (AC.outputLatency || .04) + (AC.baseLatency || .01) + window.LaboNative.latencyMs() / 2000)
+    : ((hp && DEV.lat != null) ? DEV.lat / 1000 : (AC.outputLatency || .01) + (AC.baseLatency || .005) + (Mic.legacy ? .03 : .006));
+  const Metro = (() => {
+    const LS = 'labo-metro';
+    let M; try { M = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { M = {}; }
+    M = Object.assign({ bpm: 80, beats: 4, sub: 1, sound: 'clic', accent: true, ghost: 0, ramp: false, rampStep: 2, rampEvery: 4, rampTo: 140, vol: 1, coach: false }, M);
+    const persist = () => { try { localStorage.setItem(LS, JSON.stringify(M)); } catch (e) { } };
+    let run = null, raf = 0, el = null, taps = [];
+    const SOUNDS = [['clic', '🔔 Clic'], ['perso', '🎙️ Ma voix'], ['fr', '🤖 Robot FR'], ['en', '🤖 Robot EN']];
+    const SUBS = [[1, '♩', 'noires'], [2, '♫', 'croches'], [3, '³', 'triolets'], [4, '♬', 'doubles']];
+    const GHOSTS = [[0, 'Non'], [1, '1 / 1'], [2, '2 / 2'], [4, '4 / 4']];
+    const chips = (list, cur, key) => list.map(([v, l]) => `<button class="chip ${String(cur) === String(v) ? 'on' : ''}" data-${key}="${v}">${l}</button>`).join('');
+
+    function html() {
+      return `<div class="mt-top"><b class="mt-logo">⏱️ Coach rythme</b><button class="mt-x" data-mx aria-label="Fermer">✕</button></div>
+      <div class="mt-scroll">
+        <div class="mt-bpm">
+          <button class="mt-pm" data-step="-1">−</button>
+          <div class="mt-num"><b id="mtBpm">${M.bpm}</b><span>BPM</span></div>
+          <button class="mt-pm" data-step="1">+</button>
+        </div>
+        <input type="range" id="mtRange" min="30" max="240" value="${M.bpm}">
+        <div class="mt-row2"><button class="chip" data-jump="-5">−5</button><button class="mt-tap" id="mtTap">👆 Tape le tempo</button><button class="chip" data-jump="5">+5</button></div>
+        <div class="mt-beats" id="mtBeats"></div>
+        <div class="mt-status" id="mtStatus">Prêt quand tu veux</div>
+        <button class="mt-go" id="mtGo">▶ Lancer</button>
+        <div class="mt-coach ${M.coach ? '' : 'off'}" id="mtCoach">
+          <div class="mt-ch"><b>🎧 Écoute-moi</b><button class="tog ${M.coach ? 'on' : ''}" id="mtCoachTog">${M.coach ? 'Activé' : 'Désactivé'}</button></div>
+          <p class="mt-hint">${M.coach ? 'Joue sur le clic (gratte, frappe, tape dans tes mains) : je te dis si tu es pile dedans. <b>Avec des écouteurs</b>, sinon j\'entends le clic à ta place.' : 'Active-le : je t\'écoute jouer et je te dis si tu es en avance ou en retard.'}</p>
+          <div class="mt-scale"><span class="l">en avance</span><span class="c"></span><span class="r">en retard</span><div id="mtDots"></div></div>
+          <div class="mt-verdict" id="mtVerdict">—</div>
+          <div class="mt-stats"><div><b id="mtScore">–</b><span>pile dedans</span></div><div><b id="mtAvg">–</b><span>tendance</span></div><div><b id="mtStreak">0</b><span>🔥 série</span></div></div>
+        </div>
+        <div class="mt-card"><label>Le son</label><div class="chips" data-g="sound">${chips(SOUNDS, M.sound, 'snd')}</div>
+          ${window.LABO_CUSTOM ? '' : '<p class="mt-hint">🎙️ « Ma voix » : tu enregistres une fois « 1, 2, 3, 4 » et c\'est toi qui comptes.</p>'}
+          <div class="mt-vol"><span>🔈</span><input type="range" id="mtVol" min="0" max="1.5" step=".05" value="${M.vol}"><span>🔊</span></div></div>
+        <div class="mt-card"><label>Temps par mesure</label><div class="chips">${chips([[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']], M.beats, 'bt')}</div>
+          <label>Subdivision</label><div class="chips">${SUBS.map(([v, s, l]) => `<button class="chip ${M.sub === v ? 'on' : ''}" data-sub="${v}">${s} ${l}</button>`).join('')}</div>
+          <button class="chip ${M.accent ? 'on' : ''}" id="mtAcc" style="margin-top:8px">${M.accent ? '✓' : '○'} Temps 1 accentué</button></div>
+        <div class="mt-card"><label>🤫 Clic fantôme</label><p class="mt-hint">Le clic joue, puis se tait : tu dois tenir le tempo tout seul. (mesures avec clic / sans)</p><div class="chips">${chips(GHOSTS, M.ghost, 'gh')}</div></div>
+        <div class="mt-card"><label>🚀 Accélérateur</label><p class="mt-hint">Le tempo monte tout seul pendant que tu joues.</p>
+          <button class="chip ${M.ramp ? 'on' : ''}" id="mtRamp">${M.ramp ? '✓ Activé' : '○ Désactivé'}</button>
+          <div class="mt-ramp ${M.ramp ? '' : 'dim'}">+<select id="mtRS">${[1, 2, 3, 5, 10].map(v => `<option ${M.rampStep === v ? 'selected' : ''}>${v}</option>`).join('')}</select> BPM toutes les <select id="mtRE">${[1, 2, 4, 8].map(v => `<option ${M.rampEvery === v ? 'selected' : ''}>${v}</option>`).join('')}</select> mesures, jusqu'à <select id="mtRT">${[80, 100, 120, 140, 160, 180, 200, 220].map(v => `<option ${M.rampTo === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
+      </div>`;
+    }
+    function drawBeats() {
+      const b = el.querySelector('#mtBeats'); let h = '';
+      for (let i = 0; i < M.beats; i++) h += `<div class="mt-beat ${i === 0 && M.accent ? 'acc' : ''}" data-i="${i}"><i>${i + 1}</i>${M.sub > 1 ? `<div class="mt-subs">${'<s></s>'.repeat(M.sub - 1)}</div>` : ''}</div>`;
+      b.innerHTML = h;
+    }
+    function setBpm(v) {
+      M.bpm = Math.max(30, Math.min(240, Math.round(v))); persist();
+      el.querySelector('#mtBpm').textContent = M.bpm; el.querySelector('#mtRange').value = M.bpm;
+    }
+    function mount() {
+      el.innerHTML = html(); drawBeats();
+      const q = s => el.querySelector(s), qa = s => el.querySelectorAll(s);
+      q('[data-mx]').onclick = close;
+      qa('[data-step]').forEach(b => holdRepeat(b, () => setBpm(M.bpm + +b.dataset.step)));
+      qa('[data-jump]').forEach(b => b.onclick = () => setBpm(M.bpm + +b.dataset.jump));
+      q('#mtRange').oninput = e => setBpm(+e.target.value);
+      q('#mtTap').onclick = () => {
+        const t = performance.now(); taps = taps.filter(x => t - x < 2500); taps.push(t);
+        if (taps.length >= 2) { const d = []; for (let i = 1; i < taps.length; i++) d.push(taps[i] - taps[i - 1]); setBpm(60000 / (d.reduce((a, c) => a + c, 0) / d.length)); }
+        const tb = q('#mtTap'); tb.classList.remove('hit'); void tb.offsetWidth; tb.classList.add('hit');
+      };
+      q('#mtGo').onclick = () => run ? stopRun() : startRun();
+      q('#mtCoachTog').onclick = () => { M.coach = !M.coach; persist(); const was = !!run; if (was) stopRun(); mount(); if (was) startRun(); };
+      qa('[data-snd]').forEach(b => b.onclick = () => {
+        if (b.dataset.snd === 'perso' && !window.LABO_CUSTOM) { const was = !!run; if (was) stopRun(); openVoiceCountSheet(() => { closeSheet(); if (window.LABO_CUSTOM) { M.sound = 'perso'; persist(); } mount(); }); return; }
+        M.sound = b.dataset.snd; persist(); qa('[data-snd]').forEach(y => y.classList.toggle('on', y === b));
+        if (!run) { E.clickMode = M.sound; const t = AC.currentTime + .05, bt = 60 / Math.max(M.bpm, 100); for (let i = 0; i < 4; i++) E.click(t + i * bt, i === 0, M.vol, i); setTimeout(() => { if (!run) E.clickMode = P.clickMode || 'clic'; }, 2500); }
+      });
+      q('#mtVol').oninput = e => { M.vol = +e.target.value; persist(); };
+      qa('[data-bt]').forEach(b => b.onclick = () => { M.beats = +b.dataset.bt; persist(); qa('[data-bt]').forEach(y => y.classList.toggle('on', y === b)); drawBeats(); });
+      qa('[data-sub]').forEach(b => b.onclick = () => { M.sub = +b.dataset.sub; persist(); qa('[data-sub]').forEach(y => y.classList.toggle('on', y === b)); drawBeats(); });
+      q('#mtAcc').onclick = () => { M.accent = !M.accent; persist(); mount(); };
+      qa('[data-gh]').forEach(b => b.onclick = () => { M.ghost = +b.dataset.gh; persist(); qa('[data-gh]').forEach(y => y.classList.toggle('on', y === b)); });
+      q('#mtRamp').onclick = () => { M.ramp = !M.ramp; persist(); mount(); if (run) run.rampBase = M.bpm; };
+      q('#mtRS').onchange = e => { M.rampStep = +e.target.value; persist(); };
+      q('#mtRE').onchange = e => { M.rampEvery = +e.target.value; persist(); };
+      q('#mtRT').onchange = e => { M.rampTo = +e.target.value; persist(); };
+      if (run) { q('#mtGo').textContent = '■ Stop'; q('#mtGo').classList.add('on'); }
+    }
+    function holdRepeat(b, fn) {
+      let t1 = 0, t2 = 0; const end = () => { clearTimeout(t1); clearInterval(t2); };
+      b.onpointerdown = e => { e.preventDefault(); fn(); t1 = setTimeout(() => { t2 = setInterval(fn, 70); }, 420); };
+      b.onpointerup = b.onpointerleave = b.onpointercancel = end;
+    }
+
+    /* ---------- moteur : programmation en avance, très précise ---------- */
+    async function startRun() {
+      AC.resume(); if (AC.state !== 'running') await AC.resume();
+      if (player && player.playing) stop();
+      E.clickMode = M.sound;
+      const r = { next: AC.currentTime + .25, beat: 0, bar: 0, sub: 0, grid: [], hits: [], streak: 0, timer: 0, coach: false };
+      run = r; keepAwake(true);
+      r.timer = setInterval(tick, 20); tick();
+      if (M.coach) {
+        try { await Mic.ensure(); if (run !== r) return; Mic.start(); r.coach = true; r.read = 0; r.ci = 0; r.cOff = 0; r.det = { nf: 1e-7, slow: 1e-7, last: -9, prev: 0, carry: null }; r.ctimer = setInterval(coachRead, 80); }
+        catch (e) { toast('🎙️ Micro refusé : « Écoute-moi » a besoin du micro'); }
+      }
+      const g = el.querySelector('#mtGo'); g.textContent = '■ Stop'; g.classList.add('on');
+      el.querySelector('#mtVerdict').textContent = M.coach ? 'Joue sur le clic…' : '—';
+      loop();
+    }
+    function stopRun() {
+      const r = run; if (!r) return; run = null; clearInterval(r.timer); clearInterval(r.ctimer); cancelAnimationFrame(raf);
+      if (r.coach) { Mic.stop(false); }
+      E.clickMode = P.clickMode || 'clic'; keepAwake(false);
+      if (!el) return;
+      const g = el.querySelector('#mtGo'); g.textContent = '▶ Lancer'; g.classList.remove('on');
+      el.querySelectorAll('.mt-beat').forEach(b => b.classList.remove('lit', 'ghost')); el.querySelectorAll('.mt-subs s').forEach(s => s.classList.remove('lit'));
+      el.querySelector('#mtStatus').textContent = r.hits.length ? `Bilan : ${summary(r)}` : 'Prêt quand tu veux';
+    }
+    function tick() {
+      const r = run; if (!r) return;
+      while (r.next < AC.currentTime + .15) {
+        const t = r.next, beatDur = 60 / M.bpm, sd = beatDur / M.sub;
+        if (r.sub === 0 && r.beat >= M.beats) { r.beat = 0; r.bar++; }
+        if (r.sub === 0 && r.beat === 0 && r.bar > 0 && M.ramp && r.bar % M.rampEvery === 0 && M.bpm < M.rampTo) { const nb = Math.min(M.rampTo, M.bpm + M.rampStep); M.bpm = nb; persist(); setTimeout(() => { if (el) setBpm(nb); }, Math.max(0, (t - AC.currentTime) * 1000)); }
+        const audible = !M.ghost || (r.bar % (M.ghost * 2)) < M.ghost;
+        if (r.sub === 0) {
+          if (audible) E.click(t, M.accent && r.beat === 0, M.vol, r.beat);
+          r.grid.push({ t, beat: r.beat, bar: r.bar, audible, main: true });
+        } else {
+          if (audible) subTick(t);
+          r.grid.push({ t, beat: r.beat, sub: r.sub, bar: r.bar, audible, main: false });
+        }
+        if (r.grid.length > 400) r.grid.splice(0, 200);
+        r.next += (60 / M.bpm) / M.sub; r.sub++;
+        if (r.sub >= M.sub) { r.sub = 0; r.beat++; }
+      }
+    }
+    function subTick(t) {
+      const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.value = 2600;
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.16 * M.vol, t + .002); g.gain.exponentialRampToValueAtTime(.0001, t + .035);
+      o.connect(g); g.connect(E.out || E.master); o.start(t); o.stop(t + .05);
+    }
+    function loop() {
+      const r = run; if (!r || !el) return;
+      const now = AC.currentTime - (AC.outputLatency || 0) - (AC.baseLatency || 0);
+      let cur = null; for (let i = r.grid.length - 1; i >= 0; i--) if (r.grid[i].t <= now) { cur = r.grid[i]; break; }
+      if (cur && cur !== r.shown) {
+        r.shown = cur; const bs = el.querySelectorAll('.mt-beat');
+        bs.forEach((b, i) => { const on = cur.audible && i === cur.beat; b.classList.toggle('lit', on && cur.main); b.classList.toggle('ghost', !cur.audible && i === cur.beat); const ss = b.querySelectorAll('s'); ss.forEach((s, j) => s.classList.toggle('lit', cur.audible && i === cur.beat && !cur.main && cur.sub === j + 1)); });
+        if (cur.main && cur.audible && navigator.vibrate && M.vibe) navigator.vibrate(15);
+        const st = el.querySelector('#mtStatus');
+        st.textContent = !cur.audible ? '🤫 Silence… tiens le tempo tout seul !' : (M.ghost ? `Mesure ${cur.bar + 1} · le clic va se taire` : `Mesure ${cur.bar + 1}`) + (M.ramp ? ` · 🚀 vers ${M.rampTo}` : '');
+        st.classList.toggle('ghost', !cur.audible);
+      }
+      raf = requestAnimationFrame(loop);
+    }
+
+    /* ---------- Écoute-moi : on lit le micro en direct et on repère tes attaques ---------- */
+    function coachRead() {
+      const r = run; if (!r || !r.coach) return;
+      let data, t0, sr;
+      if (NATIVE) {
+        const N = window.LaboNative; sr = N.sampleRate(); const tot = N.recordedFrames();
+        if (tot > sr * 250) { N.recStop(); Mic.t0 = AC.currentTime; N.recStart(); r.read = 0; return; }
+        const n = tot - r.read; if (n <= 0) return;
+        const b64 = N.readChunk(r.read, n), bin = atob(b64), x = new Float32Array(bin.length >> 1);
+        for (let i = 0; i < x.length; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v > 32767) v -= 65536; x[i] = v / 32768; }
+        data = x; t0 = Mic.t0 + r.read / sr; r.read = tot;
+      } else {
+        sr = AC.sampleRate; if (Mic.f0 == null) return;
+        const parts = []; let n = 0; while (r.ci < Mic.chunks.length) { const c = Mic.chunks[r.ci++]; parts.push(c); n += c.length; }
+        if (!n) return; data = new Float32Array(n); let o = 0; parts.forEach(c => { data.set(c, o); o += c.length; });
+        t0 = (Mic.f0 + r.cOff) / sr; r.cOff += n;
+        if (Mic.chunks.length > 2000) { Mic.chunks.splice(0, r.ci); r.ci = 0; }
+      }
+      detect(r, data, t0, sr);
+    }
+    function detect(r, x, t0, sr) {
+      const d = r.det, H = Math.max(64, Math.round(sr * .004)), lat = micLat(true);
+      let prev = d.carry == null ? x[0] : d.carry;
+      for (let h = 0; h + H <= x.length; h += H) {
+        let e = 0, mx = 0, mi = h;
+        for (let i = h; i < h + H; i++) { const y = x[i] - prev; prev = x[i]; e += y * y; const a = Math.abs(y); if (a > mx) { mx = a; mi = i; } }
+        e /= H; const t = t0 + h / sr;
+        const isOn = e > d.nf * 30 && e > d.slow * 5 && e > 2e-6 && t - d.last > .09;
+        if (isOn) {
+          let k = h; const thr = mx * .35; while (k < mi && Math.abs(x[k + 1] - x[k]) < thr) k++;
+          d.last = t; hit(r, t0 + k / sr - lat);
+        }
+        d.slow = d.slow * .85 + e * .15;
+        d.nf = e < d.nf ? d.nf * .9 + e * .1 : d.nf * 1.003 + 1e-12;
+      }
+      d.carry = x.length ? x[x.length - 1] : prev;
+    }
+    function hit(r, t) {
+      const g = r.grid; if (!g.length) return;
+      let best = null; for (const p of g) if (!best || Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
+      const span = (60 / M.bpm) / M.sub; const dv = t - best.t;
+      if (Math.abs(dv) > span * .45) return;
+      const ms = Math.round(dv * 1000); r.hits.push(ms); if (r.hits.length > 64) r.hits.shift();
+      r.streak = Math.abs(ms) <= 25 ? r.streak + 1 : 0; r.best = Math.max(r.best || 0, r.streak);
+      if (!el) return;
+      const v = el.querySelector('#mtVerdict'), a = Math.abs(ms);
+      v.className = 'mt-verdict ' + (a <= 15 ? 'ok' : a <= 35 ? 'mid' : 'bad');
+      v.textContent = a <= 15 ? '🎯 Pile !' : (ms < 0 ? (a <= 35 ? 'Un poil en avance' : 'En avance') : (a <= 35 ? 'Un poil en retard' : 'En retard')) + ` · ${ms > 0 ? '+' : ''}${ms} ms`;
+      if (!best.audible) v.textContent += ' 🤫';
+      const dots = el.querySelector('#mtDots'); const dot = document.createElement('i');
+      dot.style.left = (50 + Math.max(-50, Math.min(50, ms / 2))) + '%'; dot.className = a <= 15 ? 'ok' : a <= 35 ? 'mid' : 'bad'; dots.appendChild(dot);
+      while (dots.children.length > 12) dots.removeChild(dots.firstChild);
+      [...dots.children].forEach((c, i, all) => c.style.opacity = .25 + .75 * (i + 1) / all.length);
+      const last = r.hits.slice(-24), inT = last.filter(m => Math.abs(m) <= 25).length, avg = last.reduce((s, m) => s + m, 0) / last.length;
+      el.querySelector('#mtScore').textContent = Math.round(inT / last.length * 100) + ' %';
+      el.querySelector('#mtAvg').textContent = Math.abs(avg) < 8 ? 'au centre 👌' : (avg < 0 ? `${Math.round(-avg)} ms en avance` : `${Math.round(avg)} ms en retard`);
+      el.querySelector('#mtStreak').textContent = r.streak;
+      if (r.streak && r.streak % 8 === 0) { toast(`🔥 ${r.streak} coups pile dans le temps !`); if (navigator.vibrate) navigator.vibrate([20, 40, 20]); }
+    }
+    function summary(r) {
+      const h = r.hits, inT = h.filter(m => Math.abs(m) <= 25).length, avg = h.reduce((s, m) => s + m, 0) / h.length;
+      return `${Math.round(inT / h.length * 100)} % pile dedans, ${Math.abs(avg) < 8 ? 'bien centré' : avg < 0 ? 'plutôt en avance' : 'plutôt en retard'}, meilleure série ${r.best || 0}`;
+    }
+
+    function open() {
+      if (!el) { el = document.createElement('div'); el.id = 'metro'; document.body.appendChild(el); }
+      el.hidden = false; document.body.classList.add('metro-open'); mount();
+    }
+    function close() { stopRun(); if (el) el.hidden = true; document.body.classList.remove('metro-open'); }
+    return { open, close, get running() { return !!run; }, get state() { return M; }, get run() { return run; }, _hit: t => run && hit(run, t) };
+  })();
   const bugToast = m => { try { toast('⚠️ Petit bug : ' + String(m).slice(0, 90)); } catch (e) { } };
   window.addEventListener('error', e => bugToast(e.message));
   window.addEventListener('unhandledrejection', e => bugToast(e.reason && (e.reason.message || e.reason)));
-  window.LaboDebug = { Mic, get P() { return P; }, get E() { return E; }, get player() { return player; } };
+  window.LaboDebug = { Metro, Mic, get P() { return P; }, get E() { return E; }, get player() { return player; } };
   /* ---------- démarrage ---------- */
   $('installBtn').hidden = NATIVE || isStandalone() || !/Android|iP(hone|ad|od)/.test(navigator.userAgent);
   if (!NATIVE && /Android/.test(navigator.userAgent)) { const a = document.createElement('a'); a.href = APK_URL; a.className = 'btn-inst'; a.style.textDecoration = 'none'; a.textContent = '🤖 Appli Android (son sans décalage)'; $('installBtn').after(a); }
   if (NATIVE) document.querySelector('.tiny').textContent = '⚡ Moteur audio natif actif · version ' + VERSION;
   $('installBtn').onclick = () => installApp();
+  $('metroBtn').onclick = async () => { $('metroBtn').textContent = '…'; await $('openBtn').onclick(); Metro.open(); };
   $('openBtn').onclick = async () => {
     const A = window.AudioContext || window.webkitAudioContext;
     const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
