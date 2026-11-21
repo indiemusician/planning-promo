@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 34;
+  const VERSION = 35;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -1239,11 +1239,12 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
   const Metro = (() => {
     const LS = 'labo-metro';
     let M; try { M = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { M = {}; }
-    M = Object.assign({ bpm: 80, beats: 4, sub: 1, sound: 'clic', accent: true, ghost: 0, ramp: false, rampStep: 2, rampEvery: 4, rampTo: 140, vol: 1, coach: false }, M);
+    M = Object.assign({ bpm: 80, beats: 4, sub: 1, sound: 'clic', accent: true, ghost: 0, ramp: false, rampStep: 2, rampEvery: 4, rampTo: 140, vol: 1, coach: false, kick: 'off', kickVol: 1 }, M);
     const persist = () => { try { localStorage.setItem(LS, JSON.stringify(M)); } catch (e) { } };
     let run = null, raf = 0, el = null, taps = [];
     const SOUNDS = [['clic', '🔔 Clic'], ['perso', '🎙️ Ma voix'], ['fr', '🤖 Robot FR'], ['en', '🤖 Robot EN']];
     const SUBS = [[1, '♩', 'noires'], [2, '♫', 'croches'], [3, '³', 'triolets'], [4, '♬', 'doubles']];
+    const KICKS = [['off', 'Rien'], ['all', 'Kick sur chaque temps'], ['13', 'Kick sur 1 et 3'], ['ks', 'Kick + caisse claire'], ['full', 'Petit groove complet']];
     const GHOSTS = [[0, 'Non'], [1, '1 / 1'], [2, '2 / 2'], [4, '4 / 4']];
     const chips = (list, cur, key) => list.map(([v, l]) => `<button class="chip ${String(cur) === String(v) ? 'on' : ''}" data-${key}="${v}">${l}</button>`).join('');
 
@@ -1264,6 +1265,10 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
           <div class="mt-myvoice">${window.LABO_CUSTOM
             ? '<span>✓ Ta voix est enregistrée</span><button class="chip" id="mtVoicePlay">▶ Réécouter</button><button class="chip" id="mtVoiceRec">🎙️ Refaire</button>'
             : '<button class="btn red full" id="mtVoiceRec">🎙️ Enregistrer ma voix « 1, 2, 3, 4 »</button>'}</div>
+          <label style="margin-top:14px">🥁 Batterie avec le compte</label>
+          <div class="chips">${chips(KICKS, M.kick, 'kk')}</div>
+          <div class="mt-vol ${M.kick === 'off' ? 'dim' : ''}" id="mtKVolRow"><span title="Volume batterie">🥁</span><input type="range" id="mtKVol" min="0" max="1.6" step=".05" value="${M.kickVol}"><span>🔊</span></div>
+          <label style="margin-top:6px">Volume du compte</label>
           <div class="mt-vol"><span>🔈</span><input type="range" id="mtVol" min="0" max="1.5" step=".05" value="${M.vol}"><span>🔊</span></div></div>
         <div class="mt-coach ${M.coach ? '' : 'off'}" id="mtCoach">
           <div class="mt-ch"><b>🎧 Écoute-moi</b><button class="tog ${M.coach ? 'on' : ''}" id="mtCoachTog">${M.coach ? 'Activé' : 'Désactivé'}</button></div>
@@ -1311,6 +1316,8 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       });
       q('#mtVoiceRec').onclick = recVoice;
       if (q('#mtVoicePlay')) q('#mtVoicePlay').onclick = () => { const sv = E.clickMode; E.clickMode = 'perso'; const t = AC.currentTime + .05, bt = 60 / Math.max(M.bpm, 90); for (let i = 0; i < 4; i++) E.click(t + i * bt, i === 0, M.vol, i); setTimeout(() => { if (!run) E.clickMode = sv; }, 3000); };
+      qa('[data-kk]').forEach(b => b.onclick = () => { M.kick = b.dataset.kk; persist(); qa('[data-kk]').forEach(y => y.classList.toggle('on', y === b)); q('#mtKVolRow').classList.toggle('dim', M.kick === 'off'); if (!run && M.kick !== 'off') previewKick(); });
+      q('#mtKVol').oninput = e => { M.kickVol = +e.target.value; persist(); };
       q('#mtVol').oninput = e => { M.vol = +e.target.value; persist(); };
       qa('[data-bt]').forEach(b => b.onclick = () => { M.beats = +b.dataset.bt; persist(); qa('[data-bt]').forEach(y => y.classList.toggle('on', y === b)); drawBeats(); });
       qa('[data-sub]').forEach(b => b.onclick = () => { M.sub = +b.dataset.sub; persist(); qa('[data-sub]').forEach(y => y.classList.toggle('on', y === b)); drawBeats(); });
@@ -1366,7 +1373,7 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
         if (r.sub === 0 && r.beat === 0 && r.bar > 0 && M.ramp && r.bar % M.rampEvery === 0 && M.bpm < M.rampTo) { const nb = Math.min(M.rampTo, M.bpm + M.rampStep); M.bpm = nb; persist(); setTimeout(() => { if (el) setBpm(nb); }, Math.max(0, (t - AC.currentTime) * 1000)); }
         const audible = !M.ghost || (r.bar % (M.ghost * 2)) < M.ghost;
         if (r.sub === 0) {
-          if (audible) E.click(t, M.accent && r.beat === 0, M.vol, r.beat);
+          if (audible) { if (M.vol > 0) E.click(t, M.accent && r.beat === 0, M.vol, r.beat); drumsAt(t, r.beat, 60 / M.bpm); }
           r.grid.push({ t, beat: r.beat, bar: r.bar, audible, main: true });
         } else {
           if (audible) subTick(t);
@@ -1377,6 +1384,15 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
         if (r.sub >= M.sub) { r.sub = 0; r.beat++; }
       }
     }
+    /* la batterie qui joue avec le compte */
+    function drumsAt(t, beat, bd) {
+      const k = M.kick, v = M.kickVol; if (k === 'off' || v <= 0) return;
+      const one = beat === 0, even = beat % 2 === 1;
+      if (k === 'all' || k === 'full' && !even || ((k === '13' || k === 'ks') && !even)) E.drum('k', t, (one ? 1 : .85) * v);
+      if ((k === 'ks' || k === 'full') && even) E.drum('s', t, .8 * v);
+      if (k === 'full') { E.drum('h', t, .45 * v); E.drum('h', t + bd / 2, .3 * v); if (even && beat === M.beats - 1) E.drum('k', t + bd / 2, .6 * v); }
+    }
+    function previewKick() { const t = AC.currentTime + .05, bd = 60 / Math.max(M.bpm, 90); for (let i = 0; i < 4; i++) drumsAt(t + i * bd, i, bd); }
     function subTick(t) {
       const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.value = 2600;
       g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.16 * M.vol, t + .002); g.gain.exponentialRampToValueAtTime(.0001, t + .035);

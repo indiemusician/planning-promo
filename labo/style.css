@@ -326,3 +326,4 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .mt-myvoice{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
 .mt-myvoice span{font-weight:700;font-size:13px;color:#50e68c;flex:1 1 100%}
 .mt-myvoice .btn{font-size:15px;padding:12px}
+.mt-vol.dim{opacity:.35;pointer-events:none}
