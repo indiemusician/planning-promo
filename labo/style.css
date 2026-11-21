@@ -323,3 +323,6 @@ body.sheet-open #toast{bottom:auto;top:calc(14px + env(safe-area-inset-top))}
 .mt-stats div{flex:1;text-align:center;background:rgba(7,10,31,.4);border-radius:12px;padding:8px 4px}
 .mt-stats b{display:block;font-size:16px}
 .mt-stats span{font-size:11px;opacity:.75}
+.mt-myvoice{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+.mt-myvoice span{font-weight:700;font-size:13px;color:#50e68c;flex:1 1 100%}
+.mt-myvoice .btn{font-size:15px;padding:12px}

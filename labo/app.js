@@ -97,7 +97,7 @@
   const stepDur = () => 60 / P.bpm / 4, barDur = () => 60 / P.bpm * 4;
 
   /* ---------- réglages de l'appareil (micro choisi, retard mesuré des écouteurs) ---------- */
-  const VERSION = 33;
+  const VERSION = 34;
   const DEV = (() => { try { return JSON.parse(localStorage.getItem('labo-device') || '{}'); } catch (e) { return {}; } })();
   if (DEV.lat == null) { DEV.lat = 82; DEV.latHow = 'défaut'; }
   delete DEV.inLat; delete DEV.inHist;
@@ -1260,6 +1260,11 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
         <div class="mt-beats" id="mtBeats"></div>
         <div class="mt-status" id="mtStatus">Prêt quand tu veux</div>
         <button class="mt-go" id="mtGo">▶ Lancer</button>
+        <div class="mt-card"><label>Le son</label><div class="chips" data-g="sound">${chips(SOUNDS, M.sound, 'snd')}</div>
+          <div class="mt-myvoice">${window.LABO_CUSTOM
+            ? '<span>✓ Ta voix est enregistrée</span><button class="chip" id="mtVoicePlay">▶ Réécouter</button><button class="chip" id="mtVoiceRec">🎙️ Refaire</button>'
+            : '<button class="btn red full" id="mtVoiceRec">🎙️ Enregistrer ma voix « 1, 2, 3, 4 »</button>'}</div>
+          <div class="mt-vol"><span>🔈</span><input type="range" id="mtVol" min="0" max="1.5" step=".05" value="${M.vol}"><span>🔊</span></div></div>
         <div class="mt-coach ${M.coach ? '' : 'off'}" id="mtCoach">
           <div class="mt-ch"><b>🎧 Écoute-moi</b><button class="tog ${M.coach ? 'on' : ''}" id="mtCoachTog">${M.coach ? 'Activé' : 'Désactivé'}</button></div>
           <p class="mt-hint">${M.coach ? 'Joue sur le clic (gratte, frappe, tape dans tes mains) : je te dis si tu es pile dedans. <b>Avec des écouteurs</b>, sinon j\'entends le clic à ta place.' : 'Active-le : je t\'écoute jouer et je te dis si tu es en avance ou en retard.'}</p>
@@ -1267,9 +1272,6 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
           <div class="mt-verdict" id="mtVerdict">—</div>
           <div class="mt-stats"><div><b id="mtScore">–</b><span>pile dedans</span></div><div><b id="mtAvg">–</b><span>tendance</span></div><div><b id="mtStreak">0</b><span>🔥 série</span></div></div>
         </div>
-        <div class="mt-card"><label>Le son</label><div class="chips" data-g="sound">${chips(SOUNDS, M.sound, 'snd')}</div>
-          ${window.LABO_CUSTOM ? '' : '<p class="mt-hint">🎙️ « Ma voix » : tu enregistres une fois « 1, 2, 3, 4 » et c\'est toi qui comptes.</p>'}
-          <div class="mt-vol"><span>🔈</span><input type="range" id="mtVol" min="0" max="1.5" step=".05" value="${M.vol}"><span>🔊</span></div></div>
         <div class="mt-card"><label>Temps par mesure</label><div class="chips">${chips([[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']], M.beats, 'bt')}</div>
           <label>Subdivision</label><div class="chips">${SUBS.map(([v, s, l]) => `<button class="chip ${M.sub === v ? 'on' : ''}" data-sub="${v}">${s} ${l}</button>`).join('')}</div>
           <button class="chip ${M.accent ? 'on' : ''}" id="mtAcc" style="margin-top:8px">${M.accent ? '✓' : '○'} Temps 1 accentué</button></div>
@@ -1303,10 +1305,12 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       q('#mtGo').onclick = () => run ? stopRun() : startRun();
       q('#mtCoachTog').onclick = () => { M.coach = !M.coach; persist(); const was = !!run; if (was) stopRun(); mount(); if (was) startRun(); };
       qa('[data-snd]').forEach(b => b.onclick = () => {
-        if (b.dataset.snd === 'perso' && !window.LABO_CUSTOM) { const was = !!run; if (was) stopRun(); openVoiceCountSheet(() => { closeSheet(); if (window.LABO_CUSTOM) { M.sound = 'perso'; persist(); } mount(); }); return; }
+        if (b.dataset.snd === 'perso' && !window.LABO_CUSTOM) { recVoice(); return; }
         M.sound = b.dataset.snd; persist(); qa('[data-snd]').forEach(y => y.classList.toggle('on', y === b));
         if (!run) { E.clickMode = M.sound; const t = AC.currentTime + .05, bt = 60 / Math.max(M.bpm, 100); for (let i = 0; i < 4; i++) E.click(t + i * bt, i === 0, M.vol, i); setTimeout(() => { if (!run) E.clickMode = P.clickMode || 'clic'; }, 2500); }
       });
+      q('#mtVoiceRec').onclick = recVoice;
+      if (q('#mtVoicePlay')) q('#mtVoicePlay').onclick = () => { const sv = E.clickMode; E.clickMode = 'perso'; const t = AC.currentTime + .05, bt = 60 / Math.max(M.bpm, 90); for (let i = 0; i < 4; i++) E.click(t + i * bt, i === 0, M.vol, i); setTimeout(() => { if (!run) E.clickMode = sv; }, 3000); };
       q('#mtVol').oninput = e => { M.vol = +e.target.value; persist(); };
       qa('[data-bt]').forEach(b => b.onclick = () => { M.beats = +b.dataset.bt; persist(); qa('[data-bt]').forEach(y => y.classList.toggle('on', y === b)); drawBeats(); });
       qa('[data-sub]').forEach(b => b.onclick = () => { M.sub = +b.dataset.sub; persist(); qa('[data-sub]').forEach(y => y.classList.toggle('on', y === b)); drawBeats(); });
@@ -1317,6 +1321,11 @@ const APK_URL = 'https://github.com/indiemusician/planning-promo/releases/latest
       q('#mtRE').onchange = e => { M.rampEvery = +e.target.value; persist(); };
       q('#mtRT').onchange = e => { M.rampTo = +e.target.value; persist(); };
       if (run) { q('#mtGo').textContent = '■ Stop'; q('#mtGo').classList.add('on'); }
+    }
+    function recVoice() {
+      if (run) stopRun();
+      const had = window.LABO_CUSTOM;
+      openVoiceCountSheet(() => { closeSheet(); if (window.LABO_CUSTOM && window.LABO_CUSTOM !== had) { M.sound = 'perso'; persist(); toast('🎙️ C\'est ta voix qui compte !'); } mount(); });
     }
     function holdRepeat(b, fn) {
       let t1 = 0, t2 = 0; const end = () => { clearTimeout(t1); clearInterval(t2); };
